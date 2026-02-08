@@ -1,0 +1,140 @@
+/// A wrapper around [Dio] that standardizes API calls
+/// and maps network errors to domain exceptions.
+library;
+
+import 'package:dio/dio.dart';
+
+import 'package:productivity/core/error/exceptions.dart';
+
+/// Provides typed HTTP methods with standardized error handling.
+class ApiClient {
+  final Dio _dio;
+
+  ApiClient(this._dio);
+
+  /// Performs a GET request and parses the response with [parser].
+  Future<T> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    required T Function(dynamic data) parser,
+  }) async {
+    try {
+      final response = await _dio.get(path, queryParameters: queryParameters);
+      return parser(response.data);
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw ServerException('Error al procesar la respuesta: $e');
+    }
+  }
+
+  /// Performs a POST request and parses the response with [parser].
+  Future<T> post<T>(
+    String path, {
+    dynamic data,
+    required T Function(dynamic data) parser,
+
+    /// Optional per-request timeout (applies to send/receive).
+    Duration? requestTimeout,
+  }) async {
+    try {
+      final response = await _dio.post(
+        path,
+        data: data,
+        options: requestTimeout != null
+            ? Options(
+                sendTimeout: requestTimeout,
+                receiveTimeout: requestTimeout,
+              )
+            : null,
+      );
+      return parser(response.data);
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw ServerException('Error al procesar la respuesta: $e');
+    }
+  }
+
+  /// Performs a PUT request and parses the response with [parser].
+  Future<T> put<T>(
+    String path, {
+    dynamic data,
+    required T Function(dynamic data) parser,
+  }) async {
+    try {
+      final response = await _dio.put(path, data: data);
+      return parser(response.data);
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw ServerException('Error al procesar la respuesta: $e');
+    }
+  }
+
+  /// Performs a DELETE request and parses the response with [parser].
+  Future<T> delete<T>(
+    String path, {
+    required T Function(dynamic data) parser,
+  }) async {
+    try {
+      final response = await _dio.delete(path);
+      return parser(response.data);
+    } on DioException catch (e) {
+      throw _handleDioError(e);
+    } on AppException {
+      rethrow;
+    } catch (e) {
+      throw ServerException('Error al procesar la respuesta: $e');
+    }
+  }
+
+  /// Maps [DioException] to the appropriate [AppException].
+  AppException _handleDioError(DioException e) {
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return const NetworkException('Tiempo de conexión agotado.');
+      case DioExceptionType.badResponse:
+        return _handleBadResponse(e.response);
+      case DioExceptionType.connectionError:
+        return const NetworkException('No se pudo conectar al servidor.');
+      case DioExceptionType.cancel:
+        return const NetworkException('Solicitud cancelada.');
+      default:
+        return const NetworkException('Error de red inesperado.');
+    }
+  }
+
+  /// Maps HTTP status codes to specific exceptions.
+  AppException _handleBadResponse(Response? response) {
+    final statusCode = response?.statusCode ?? 500;
+    final data = response?.data;
+
+    return switch (statusCode) {
+      401 => const UnauthorizedException(),
+      403 => const ForbiddenException(),
+      404 => const NotFoundException(),
+      422 => ValidationException(
+        (data is Map<String, dynamic>)
+            ? (data['errors'] as Map<String, dynamic>?) ?? {}
+            : {},
+        (data is Map<String, dynamic>)
+            ? data['message']?.toString() ?? 'Error de validación'
+            : 'Error de validación',
+      ),
+      _ => ServerException(
+        (data is Map<String, dynamic>)
+            ? data['message']?.toString() ?? 'Error del servidor'
+            : 'Error del servidor',
+      ),
+    };
+  }
+}
