@@ -4,8 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import 'package:productivity/app/router/routes.dart';
 import 'package:productivity/core/utils/validators.dart';
+import 'package:productivity/core/widgets/async_value_widgets.dart';
+import 'package:productivity/features/auth/domain/entities/user_entity.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
-import 'package:productivity/features/auth/presentation/state/auth_state.dart';
 import 'package:productivity/features/auth/presentation/widgets/password_field.dart';
 
 /// Login page with email and password form.
@@ -28,35 +29,29 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     super.dispose();
   }
 
-  void _onLogin() {
+  Future<void> _onLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    ref
-        .read(authNotifierProvider.notifier)
+    final success = await ref
+        .read(authProvider.notifier)
         .login(
           email: _emailController.text.trim(),
           password: _passwordController.text,
         );
+
+    if (success && mounted) {
+      context.go(AppRoutes.goals);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final authState = ref.watch(authNotifierProvider);
-    final isLoading = authState is AuthLoading;
+    final authAsync = ref.watch(authProvider);
+    final isLoading = authAsync.isLoading;
 
-    // Listen for auth state changes
-    ref.listen<AuthState>(authNotifierProvider, (_, state) {
-      if (state is AuthAuthenticated) {
-        context.go(AppRoutes.goals);
-      } else if (state is AuthError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(state.message),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-        ref.read(authNotifierProvider.notifier).clearError();
-      }
+    // Listen for errors
+    ref.listen<AsyncValue<UserEntity?>>(authProvider, (_, next) {
+      next.showErrorSnackbar(context);
     });
 
     return Scaffold(

@@ -1,3 +1,4 @@
+import 'package:productivity/app/config/env_config.dart';
 import 'package:productivity/core/network/api_client.dart';
 import 'package:productivity/core/network/api_endpoints.dart';
 import 'package:productivity/features/goals/data/models/availability_rule_model.dart';
@@ -65,8 +66,8 @@ class GoalRemoteDataSourceImpl implements GoalRemoteDataSource {
     return _apiClient.post(
       ApiEndpoints.goals,
       data: request.toJson(),
-      // Backend may take longer to create a goal (task generation), allow 90s timeout
-      requestTimeout: const Duration(seconds: 90),
+      // Backend may take longer to create a goal (task generation), use env timeout
+      requestTimeout: EnvConfig.goalCreateTimeout,
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return GoalModel.fromJson(json['goal'] as Map<String, dynamic>);
@@ -78,7 +79,10 @@ class GoalRemoteDataSourceImpl implements GoalRemoteDataSource {
   Future<GoalModel> updateGoal(int id, {String? title, String? description}) {
     return _apiClient.put(
       ApiEndpoints.goal(id),
-      data: {'title': ?title, 'description': ?description},
+      data: {
+        if (title != null) 'title': title,
+        if (description != null) 'description': description,
+      },
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return GoalModel.fromJson(json['goal'] as Map<String, dynamic>);

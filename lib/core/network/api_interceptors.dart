@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
+import 'package:productivity/app/config/env_config.dart';
 import 'package:productivity/core/constants/storage_keys.dart';
 
 /// Intercepts outgoing requests to inject the Bearer token.
@@ -58,11 +59,18 @@ class TimezoneInterceptor extends Interceptor {
   }
 }
 
-/// Logs request and response details in debug mode.
+/// Logs request and response details when logging is enabled.
+///
+/// Controlled by ENABLE_LOGGING environment variable.
 class LoggingInterceptor extends Interceptor {
+  /// Checks if logging is enabled via environment config or debug mode.
+  bool get _isLoggingEnabled {
+    return kDebugMode && EnvConfig.enableLogging;
+  }
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    if (kDebugMode) {
+    if (_isLoggingEnabled) {
       debugPrint('┌─── REQUEST ──────────────────────────────────');
       debugPrint('│ ${options.method} ${options.uri}');
       if (options.data != null) {
@@ -78,7 +86,7 @@ class LoggingInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    if (kDebugMode) {
+    if (_isLoggingEnabled) {
       debugPrint('┌─── RESPONSE ─────────────────────────────────');
       debugPrint('│ ${response.statusCode} ${response.requestOptions.uri}');
       debugPrint('└──────────────────────────────────────────────');
@@ -88,7 +96,7 @@ class LoggingInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    if (kDebugMode) {
+    if (_isLoggingEnabled) {
       debugPrint('┌─── ERROR ────────────────────────────────────');
       debugPrint('│ ${err.response?.statusCode} ${err.requestOptions.uri}');
       debugPrint('│ ${err.message}');

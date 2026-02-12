@@ -30,17 +30,17 @@ class TodayPage extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.invalidate(todayProvider);
-              ref.invalidate(nextTaskProvider);
+            onPressed: () async {
+              await ref.read(todayProvider.notifier).refresh();
+              await ref.read(nextTaskProvider.notifier).refresh();
             },
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(todayProvider);
-          ref.invalidate(nextTaskProvider);
+          await ref.read(todayProvider.notifier).refresh();
+          await ref.read(nextTaskProvider.notifier).refresh();
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -72,7 +72,7 @@ class TodayPage extends ConsumerWidget {
                   const LoadingWidget(message: 'Cargando tareas de hoy...'),
               error: (e, _) => AppErrorWidget(
                 message: userFriendlyMessage(e),
-                onRetry: () => ref.invalidate(todayProvider),
+                onRetry: () => ref.read(todayProvider.notifier).refresh(),
               ),
               data: (data) {
                 if (data.tasks.isEmpty) {
@@ -141,8 +141,8 @@ class TodayPage extends ConsumerWidget {
       // Dismiss the ongoing notification for this task.
       await ref.read(notificationServiceProvider).dismissOngoingTask(task.id);
 
-      ref.invalidate(todayProvider);
-      ref.invalidate(nextTaskProvider);
+      await ref.read(todayProvider.notifier).refresh();
+      await ref.read(nextTaskProvider.notifier).refresh();
 
       // Re-sync notifications so the next active task gets notified.
       ref.read(notificationSchedulerProvider).syncNow();

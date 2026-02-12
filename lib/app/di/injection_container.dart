@@ -9,7 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:productivity/app/config/app_config.dart';
-import 'package:productivity/core/constants/api_constants.dart';
+import 'package:productivity/app/config/env_config.dart';
 import 'package:productivity/core/network/api_client.dart';
 import 'package:productivity/core/network/api_interceptors.dart';
 
@@ -63,8 +63,8 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: ApiConstants.connectTimeout,
-      receiveTimeout: ApiConstants.receiveTimeout,
+      connectTimeout: EnvConfig.apiConnectTimeout,
+      receiveTimeout: EnvConfig.apiReceiveTimeout,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',

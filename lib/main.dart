@@ -4,6 +4,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:productivity/app/app.dart';
+import 'package:productivity/app/config/env_config.dart';
 import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/app/router/app_router.dart';
 import 'package:productivity/app/router/routes.dart';
@@ -19,6 +20,10 @@ late final ProviderContainer _container;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables from .env file.
+  await EnvConfig.load();
+  EnvConfig.printConfig();
 
   // Initialize locale data for Spanish date formatting.
   await initializeDateFormatting('es');

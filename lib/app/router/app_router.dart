@@ -8,7 +8,6 @@ import 'package:productivity/features/auth/presentation/pages/login_page.dart';
 import 'package:productivity/features/auth/presentation/pages/register_page.dart';
 import 'package:productivity/features/auth/presentation/pages/splash_page.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
-import 'package:productivity/features/auth/presentation/state/auth_state.dart';
 import 'package:productivity/features/calendar/presentation/pages/calendar_page.dart';
 import 'package:productivity/features/calendar/presentation/pages/today_page.dart';
 import 'package:productivity/features/goals/presentation/pages/create_goal_page.dart';
@@ -61,7 +60,7 @@ CustomTransitionPage<void> _buildSlideTransition({
 
 /// Provides the GoRouter instance to the app.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final authAsync = ref.watch(authProvider);
   final hasCompletedOnboarding = ref.watch(onboardingCompleteProvider);
 
   return GoRouter(
@@ -74,13 +73,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final currentPath = state.matchedLocation;
 
       // Auth state checks
-      final isInitial = authState is AuthInitial;
-      final isLoading = authState is AuthLoading;
-      final isAuthenticated = authState is AuthAuthenticated;
+      final isLoading = authAsync.isLoading;
+      final isAuthenticated = authAsync.valueOrNull != null;
 
       // Splash is always accessible during initial check
       if (currentPath == AppRoutes.splash) {
-        if (isInitial || isLoading) return null;
+        if (isLoading) return null;
         if (!hasCompletedOnboarding) return AppRoutes.onboarding;
         return isAuthenticated ? AppRoutes.goals : AppRoutes.login;
       }

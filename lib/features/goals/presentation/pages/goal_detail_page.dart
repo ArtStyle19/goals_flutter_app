@@ -29,7 +29,7 @@ class GoalDetailPage extends ConsumerWidget {
         appBar: AppBar(),
         body: AppErrorWidget(
           message: userFriendlyMessage(error),
-          onRetry: () => ref.invalidate(goalDetailProvider(goalId)),
+          onRetry: () => ref.refresh(goalDetailProvider(goalId)),
         ),
       ),
       data: (goal) {
@@ -124,7 +124,7 @@ class GoalDetailPage extends ConsumerWidget {
             ],
           ),
           body: RefreshIndicator(
-            onRefresh: () async => ref.invalidate(goalDetailProvider(goalId)),
+            onRefresh: () async => ref.refresh(goalDetailProvider(goalId)),
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -224,7 +224,7 @@ class GoalDetailPage extends ConsumerWidget {
       await ref.read(goalsProvider.notifier).generateTasks(goalId);
       if (context.mounted) {
         Navigator.of(context).pop();
-        ref.invalidate(goalDetailProvider(goalId));
+        ref.refresh(goalDetailProvider(goalId));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Tareas generadas con éxito!')),
         );
@@ -254,7 +254,7 @@ class GoalDetailPage extends ConsumerWidget {
     try {
       await ref.read(goalsProvider.notifier).completeGoal(goalId);
       if (context.mounted) {
-        ref.invalidate(goalDetailProvider(goalId));
+        ref.refresh(goalDetailProvider(goalId));
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('¡Meta completada!')));
@@ -356,7 +356,7 @@ class GoalDetailPage extends ConsumerWidget {
                   : descController.text.trim(),
             );
         if (context.mounted) {
-          ref.invalidate(goalDetailProvider(goalId));
+          ref.refresh(goalDetailProvider(goalId));
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text('Meta actualizada')));
@@ -396,7 +396,7 @@ class GoalDetailPage extends ConsumerWidget {
     try {
       await ref.read(goalsProvider.notifier).updateDeadline(goalId, picked);
       if (context.mounted) {
-        ref.invalidate(goalDetailProvider(goalId));
+        ref.refresh(goalDetailProvider(goalId));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Fecha límite actualizada')),
         );
@@ -464,7 +464,7 @@ class GoalDetailPage extends ConsumerWidget {
           },
         ]);
         if (context.mounted) {
-          ref.invalidate(goalDetailProvider(goalId));
+          ref.refresh(goalDetailProvider(goalId));
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text('Tarea agregada')));

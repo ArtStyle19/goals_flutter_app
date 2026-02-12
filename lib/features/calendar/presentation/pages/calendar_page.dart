@@ -24,12 +24,18 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
   CalendarFormat _calendarFormat = CalendarFormat.month;
+  late ({DateTime from, DateTime to}) _currentRange;
 
-  // Derive the range from focused month
-  ({DateTime from, DateTime to}) get _currentRange {
+  @override
+  void initState() {
+    super.initState();
+    _updateRange();
+  }
+
+  void _updateRange() {
     final first = DateTime(_focusedDay.year, _focusedDay.month, 1);
     final last = DateTime(_focusedDay.year, _focusedDay.month + 1, 0);
-    return (from: first, to: last);
+    _currentRange = (from: first, to: last);
   }
 
   @override
@@ -42,8 +48,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                ref.invalidate(calendarTasksProvider(_currentRange)),
+            onPressed: () async => await ref
+                .read(calendarTasksProvider(_currentRange).notifier)
+                .refresh(),
           ),
         ],
       ),
@@ -60,15 +67,17 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           // ─── Task list for selected day ────────
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () async =>
-                  ref.invalidate(calendarTasksProvider(_currentRange)),
+              onRefresh: () async => await ref
+                  .read(calendarTasksProvider(_currentRange).notifier)
+                  .refresh(),
               child: calendarAsync.when(
                 loading: () =>
                     const LoadingWidget(message: 'Cargando tareas...'),
                 error: (e, _) => AppErrorWidget(
                   message: userFriendlyMessage(e),
-                  onRetry: () =>
-                      ref.invalidate(calendarTasksProvider(_currentRange)),
+                  onRetry: () async => await ref
+                      .read(calendarTasksProvider(_currentRange).notifier)
+                      .refresh(),
                 ),
                 data: (data) {
                   final dayTasks =
@@ -150,7 +159,10 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         setState(() => _calendarFormat = format);
       },
       onPageChanged: (focused) {
-        setState(() => _focusedDay = focused);
+        setState(() {
+          _focusedDay = focused;
+          _updateRange();
+        });
       },
       eventLoader: (day) {
         return tasks.where((t) => isSameDay(t.scheduledAt, day)).toList();

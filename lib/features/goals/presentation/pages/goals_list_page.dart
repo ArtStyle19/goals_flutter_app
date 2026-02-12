@@ -35,7 +35,7 @@ class GoalsListPage extends ConsumerWidget {
           loading: () => const LoadingWidget(message: 'Cargando metas...'),
           error: (error, _) => AppErrorWidget(
             message: userFriendlyMessage(error),
-            onRetry: () => ref.invalidate(goalsProvider),
+            onRetry: () => ref.read(goalsProvider.notifier).refresh(),
           ),
           data: (goals) {
             if (goals.isEmpty) {
