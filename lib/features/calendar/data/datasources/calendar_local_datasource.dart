@@ -4,8 +4,8 @@
 /// All methods work with Drift models and convert to/from [TaskModel].
 library;
 
-import 'package:drift/drift.dart';
 import 'package:productivity/core/database/app_database.dart';
+import 'package:productivity/features/tasks/data/datasources/task_db_converter.dart';
 import 'package:productivity/features/tasks/data/models/task_model.dart';
 
 /// Abstract interface for calendar local data operations.
@@ -41,7 +41,7 @@ class CalendarLocalDataSourceImpl implements CalendarLocalDataSource {
   @override
   Future<List<TaskModel>> getTasksInRange(DateTime from, DateTime to) async {
     final dbTasks = await _database.getTasksInRange(from, to);
-    return dbTasks.map(_dbToModel).toList();
+    return dbTasks.map(dbToTaskModel).toList();
   }
 
   @override
@@ -51,14 +51,14 @@ class CalendarLocalDataSourceImpl implements CalendarLocalDataSource {
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
     final dbTasks = await _database.getTasksInRange(startOfDay, endOfDay);
-    return dbTasks.map(_dbToModel).toList();
+    return dbTasks.map(dbToTaskModel).toList();
   }
 
   @override
   Future<TaskModel?> getNextUpcomingTask() async {
     final dbTask = await _database.getNextUpcomingTask();
     if (dbTask == null) return null;
-    return _dbToModel(dbTask);
+    return dbToTaskModel(dbTask);
   }
 
   @override
@@ -71,7 +71,7 @@ class CalendarLocalDataSourceImpl implements CalendarLocalDataSource {
   Future<void> cacheCalendarTasks(List<TaskModel> tasks) async {
     if (tasks.isEmpty) return;
 
-    final companions = tasks.map(_modelToCompanion).toList();
+    final companions = tasks.map(taskModelToCompanion).toList();
     await _database.upsertTasks(companions);
   }
 
@@ -87,70 +87,5 @@ class CalendarLocalDataSourceImpl implements CalendarLocalDataSource {
     // We don't clear all tasks here as they might be used by other features
     // Instead, we rely on cache invalidation strategies
     await _database.deleteAllTasks();
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // CONVERSION HELPERS
-  // ═══════════════════════════════════════════════════════════
-
-  /// Converts Drift DB model to API TaskModel.
-  TaskModel _dbToModel(TaskDbModel db) {
-    return TaskModel(
-      id: db.id,
-      goalId: db.goalId,
-      goalTitle: db.goalTitle,
-      title: db.title,
-      description: db.description,
-      order: db.order,
-      scheduledAt: _dateTimeToString(db.scheduledAt),
-      endAt: _dateTimeToString(db.endAt),
-      durationMinutes: db.durationMinutes,
-      status: db.status,
-      isLocked: db.isLocked,
-      notes: db.notes,
-      completedAt: db.completedAt != null
-          ? _dateTimeToString(db.completedAt!)
-          : null,
-    );
-  }
-
-  /// Converts API TaskModel to Drift companion for insertion.
-  TasksCompanion _modelToCompanion(TaskModel model) {
-    final scheduled = _stringToDateTime(model.scheduledAt);
-    final duration = model.durationMinutes ?? 60;
-    final end = model.endAt != null
-        ? _stringToDateTime(model.endAt!)
-        : scheduled.add(Duration(minutes: duration));
-
-    return TasksCompanion(
-      id: Value(model.id),
-      goalId: Value(model.goalId),
-      goalTitle: Value(model.goalTitle),
-      title: Value(model.title),
-      description: Value(model.description),
-      order: Value(model.order),
-      scheduledAt: Value(scheduled),
-      endAt: Value(end),
-      durationMinutes: Value(duration),
-      status: Value(model.status),
-      isLocked: Value(model.isLocked),
-      notes: Value(model.notes),
-      completedAt: Value(
-        model.completedAt != null
-            ? _stringToDateTime(model.completedAt!)
-            : null,
-      ),
-      cachedAt: Value(DateTime.now()),
-    );
-  }
-
-  /// Converts DateTime to ISO8601 string (API format).
-  String _dateTimeToString(DateTime date) {
-    return date.toUtc().toIso8601String();
-  }
-
-  /// Parses ISO8601 string to DateTime.
-  DateTime _stringToDateTime(String str) {
-    return DateTime.parse(str).toLocal();
   }
 }

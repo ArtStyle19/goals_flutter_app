@@ -13,6 +13,7 @@ class AvailabilityRules extends Table {
   IntColumn get localId => integer().autoIncrement()();
 
   /// Foreign key to the goal this rule belongs to.
+  /// Indexed for fast lookups when fetching rules for a specific goal.
   IntColumn get goalId => integer()();
 
   /// Day of week (e.g., "monday", "tuesday").
@@ -26,4 +27,9 @@ class AvailabilityRules extends Table {
 
   @override
   String? get tableName => 'availability_rules';
+
+  @override
+  List<String> get customConstraints => [
+    'CREATE INDEX IF NOT EXISTS idx_availability_rules_goal_id ON availability_rules(goal_id)',
+  ];
 }

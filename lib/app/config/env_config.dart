@@ -46,8 +46,9 @@ abstract final class EnvConfig {
 
   /// Timeout specifically for goal creation (in seconds).
   /// This is longer because the backend may use OpenAI for task generation.
+  /// AI planning can take 2-5 minutes depending on complexity.
   static int get goalCreateTimeoutSeconds {
-    return _getInt('GOAL_CREATE_TIMEOUT_SECONDS', fallback: 90);
+    return _getInt('GOAL_CREATE_TIMEOUT_SECONDS', fallback: 300);
   }
 
   /// Connection timeout as Duration.

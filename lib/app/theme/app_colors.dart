@@ -25,6 +25,7 @@ abstract final class AppColors {
   static const Color draft = Color(0xFF9CA3AF);
   static const Color active = Color(0xFF3B82F6);
   static const Color goalCompleted = Color(0xFF10B981);
+  static const Color archived = Color(0xFF6B7280);
 
   // ─── Background ─────────────────────────────────────────
   static const Color background = Color(0xFFF8FAFC);

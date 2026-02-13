@@ -37,20 +37,31 @@ class ApiClient {
     dynamic data,
     required T Function(dynamic data) parser,
 
-    /// Optional per-request timeout (applies to send/receive).
+    /// Optional per-request timeout (applies to connect/send/receive).
+    /// This overrides the base Dio timeout for this specific request.
     Duration? requestTimeout,
   }) async {
+    // Debug logging for timeout diagnosis
+    if (requestTimeout != null) {
+      debugPrint('┌─── API CLIENT POST ────────────────────────────');
+      debugPrint('│ Path: $path');
+      debugPrint('│ Custom timeout: ${requestTimeout.inSeconds}s');
+      debugPrint('└──────────────────────────────────────────────');
+    }
+
     try {
-      final response = await _dio.post(
-        path,
-        data: data,
-        options: requestTimeout != null
-            ? Options(
-                sendTimeout: requestTimeout,
-                receiveTimeout: requestTimeout,
-              )
-            : null,
-      );
+      // Build options - if custom timeout provided, use it for all timeout types
+      // to ensure it overrides the base Dio configuration
+      final options = requestTimeout != null
+          ? Options(
+              connectTimeout: requestTimeout,
+              sendTimeout: requestTimeout,
+              receiveTimeout: requestTimeout,
+            )
+          : null;
+
+      final response = await _dio.post(path, data: data, options: options);
+
       return parser(response.data);
     } on DioException catch (e) {
       throw _handleDioError(e);

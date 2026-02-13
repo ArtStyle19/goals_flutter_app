@@ -11,10 +11,13 @@ import 'package:drift/native.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:productivity/core/constants/task_status.dart';
+import 'package:productivity/features/goals/domain/entities/goal_entity.dart';
 import 'package:productivity/core/database/converters/datetime_converter.dart';
 import 'package:productivity/core/database/tables/tasks_table.dart';
 import 'package:productivity/core/database/tables/goals_table.dart';
 import 'package:productivity/core/database/tables/availability_rules_table.dart';
+import 'package:productivity/core/utils/json_converters.dart';
 
 // Generated code will be in app_database.g.dart
 part 'app_database.g.dart';
@@ -60,8 +63,8 @@ class AppDatabase extends _$AppDatabase {
   ///
   /// Used by Calendar to show tasks for a specific period.
   Future<List<TaskDbModel>> getTasksInRange(DateTime from, DateTime to) {
-    final fromUnix = from.millisecondsSinceEpoch ~/ 1000;
-    final toUnix = to.millisecondsSinceEpoch ~/ 1000;
+    final fromUnix = dateTimeToUnixSeconds(from);
+    final toUnix = dateTimeToUnixSeconds(to);
 
     return (select(tasks)
           ..where(
@@ -84,19 +87,19 @@ class AppDatabase extends _$AppDatabase {
   /// Gets all pending tasks (scheduled status).
   Future<List<TaskDbModel>> getPendingTasks() {
     return (select(tasks)
-          ..where((t) => t.status.equals('scheduled'))
+          ..where((t) => t.status.equals(TaskStatus.scheduled.value))
           ..orderBy([(t) => OrderingTerm(expression: t.scheduledAt)]))
         .get();
   }
 
   /// Gets the next upcoming task.
   Future<TaskDbModel?> getNextUpcomingTask() {
-    final nowUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final nowUnix = dateTimeToUnixSeconds(DateTime.now());
 
     return (select(tasks)
           ..where(
             (t) =>
-                t.status.equals('scheduled') &
+                t.status.equals(TaskStatus.scheduled.value) &
                 t.scheduledAt.isBiggerOrEqualValue(nowUnix),
           )
           ..orderBy([(t) => OrderingTerm(expression: t.scheduledAt)])
@@ -128,7 +131,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Deletes tasks older than a certain date (cache cleanup).
   Future<int> deleteTasksOlderThan(DateTime date) {
-    final unix = date.millisecondsSinceEpoch ~/ 1000;
+    final unix = dateTimeToUnixSeconds(date);
     return (delete(
       tasks,
     )..where((t) => t.scheduledAt.isSmallerThanValue(unix))).go();
@@ -142,7 +145,7 @@ class AppDatabase extends _$AppDatabase {
 
   /// Deletes future tasks (scheduled after a date) for a specific goal.
   Future<int> deleteFutureTasksByGoalId(int goalId, DateTime from) {
-    final fromUnix = from.millisecondsSinceEpoch ~/ 1000;
+    final fromUnix = dateTimeToUnixSeconds(from);
     return (delete(tasks)..where(
           (t) =>
               t.goalId.equals(goalId) &
@@ -180,7 +183,7 @@ class AppDatabase extends _$AppDatabase {
   /// Gets active goals (not completed) ordered by creation date.
   Future<List<GoalDbModel>> getActiveGoals() {
     return (select(goals)
-          ..where((g) => g.status.equals('active'))
+          ..where((g) => g.status.equals(GoalStatus.active.value))
           ..orderBy([
             (g) =>
                 OrderingTerm(expression: g.createdAt, mode: OrderingMode.desc),

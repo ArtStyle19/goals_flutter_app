@@ -1,47 +1,9 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:productivity/core/utils/json_converters.dart';
 import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
 
 part 'task_model.g.dart';
-
-/// Safely converts a dynamic value to int, handling null, String, and num.
-int _safeInt(dynamic v, [int fallback = 0]) {
-  if (v == null) return fallback;
-  if (v is num) return v.toInt();
-  if (v is String) return int.tryParse(v) ?? fallback;
-  return fallback;
-}
-
-/// Safely converts a dynamic value to bool, handling null, String, int, and bool.
-bool _safeBool(dynamic v, [bool fallback = false]) {
-  if (v == null) return fallback;
-  if (v is bool) return v;
-  if (v is num) return v != 0;
-  if (v is String) return v.toLowerCase() == 'true' || v == '1';
-  return fallback;
-}
-
-/// Safely converts nullable dynamic to nullable int.
-int? _safeIntNullable(dynamic v) {
-  if (v == null) return null;
-  if (v is num) return v.toInt();
-  if (v is String) return int.tryParse(v);
-  return null;
-}
-
-/// Safely converts nullable dynamic to String with fallback.
-String _safeString(dynamic v, [String fallback = '']) {
-  if (v == null) return fallback;
-  if (v is String) return v;
-  return v.toString();
-}
-
-/// Safely converts nullable dynamic to nullable String.
-String? _safeStringNullable(dynamic v) {
-  if (v == null) return null;
-  if (v is String) return v;
-  return v.toString();
-}
 
 /// DTO for Task data from the API.
 @JsonSerializable()
@@ -49,27 +11,27 @@ class TaskModel {
   final int id;
   @JsonKey(name: 'goal_id')
   final int goalId;
-  @JsonKey(name: 'goal_title', fromJson: _safeStringNullable)
+  @JsonKey(name: 'goal_title', fromJson: safeStringNullable)
   final String? goalTitle;
-  @JsonKey(fromJson: _safeString)
+  @JsonKey(fromJson: safeString)
   final String title;
-  @JsonKey(fromJson: _safeStringNullable)
+  @JsonKey(fromJson: safeStringNullable)
   final String? description;
-  @JsonKey(fromJson: _safeInt)
+  @JsonKey(fromJson: safeInt)
   final int order;
-  @JsonKey(name: 'scheduled_at', fromJson: _safeString)
+  @JsonKey(name: 'scheduled_at', fromJson: safeString)
   final String scheduledAt;
-  @JsonKey(name: 'end_at', fromJson: _safeStringNullable)
+  @JsonKey(name: 'end_at', fromJson: safeStringNullable)
   final String? endAt;
-  @JsonKey(name: 'duration_minutes', fromJson: _safeIntNullable)
+  @JsonKey(name: 'duration_minutes', fromJson: safeIntNullable)
   final int? durationMinutes;
-  @JsonKey(fromJson: _safeString)
+  @JsonKey(fromJson: safeString)
   final String status;
-  @JsonKey(name: 'is_locked', fromJson: _safeBool)
+  @JsonKey(name: 'is_locked', fromJson: safeBool)
   final bool isLocked;
-  @JsonKey(fromJson: _safeStringNullable)
+  @JsonKey(fromJson: safeStringNullable)
   final String? notes;
-  @JsonKey(name: 'completed_at', fromJson: _safeStringNullable)
+  @JsonKey(name: 'completed_at', fromJson: safeStringNullable)
   final String? completedAt;
 
   const TaskModel({

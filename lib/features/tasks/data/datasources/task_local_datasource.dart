@@ -6,6 +6,7 @@ library;
 
 import 'package:drift/drift.dart';
 import 'package:productivity/core/database/app_database.dart';
+import 'package:productivity/features/tasks/data/datasources/task_db_converter.dart';
 import 'package:productivity/features/tasks/data/models/task_model.dart';
 
 /// Abstract interface for task local data operations.
@@ -63,43 +64,43 @@ class TaskLocalDataSourceImpl implements TaskLocalDataSource {
   Future<TaskModel?> getTask(int id) async {
     final dbTask = await _database.getTask(id);
     if (dbTask == null) return null;
-    return _dbToModel(dbTask);
+    return dbToTaskModel(dbTask);
   }
 
   @override
   Future<List<TaskModel>> getTasksInRange(DateTime from, DateTime to) async {
     final dbTasks = await _database.getTasksInRange(from, to);
-    return dbTasks.map(_dbToModel).toList();
+    return dbTasks.map(dbToTaskModel).toList();
   }
 
   @override
   Future<List<TaskModel>> getTasksForDate(DateTime date) async {
     final dbTasks = await _database.getTasksForDate(date);
-    return dbTasks.map(_dbToModel).toList();
+    return dbTasks.map(dbToTaskModel).toList();
   }
 
   @override
   Future<List<TaskModel>> getPendingTasks() async {
     final dbTasks = await _database.getPendingTasks();
-    return dbTasks.map(_dbToModel).toList();
+    return dbTasks.map(dbToTaskModel).toList();
   }
 
   @override
   Future<TaskModel?> getNextUpcomingTask() async {
     final dbTask = await _database.getNextUpcomingTask();
     if (dbTask == null) return null;
-    return _dbToModel(dbTask);
+    return dbToTaskModel(dbTask);
   }
 
   @override
   Future<void> cacheTask(TaskModel task) async {
-    final companion = _modelToCompanion(task);
+    final companion = taskModelToCompanion(task);
     await _database.upsertTask(companion);
   }
 
   @override
   Future<void> cacheTasks(List<TaskModel> tasks) async {
-    final companions = tasks.map(_modelToCompanion).toList();
+    final companions = tasks.map(taskModelToCompanion).toList();
     await _database.upsertTasks(companions);
   }
 
@@ -131,73 +132,6 @@ class TaskLocalDataSourceImpl implements TaskLocalDataSource {
   @override
   Future<List<TaskModel>> getTasksForGoal(int goalId) async {
     final dbTasks = await _database.getTasksByGoalId(goalId);
-    return dbTasks.map(_dbToModel).toList();
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // CONVERSION HELPERS
-  // ═══════════════════════════════════════════════════════════
-
-  /// Converts Drift DB model to API TaskModel.
-  TaskModel _dbToModel(TaskDbModel db) {
-    return TaskModel(
-      id: db.id,
-      goalId: db.goalId,
-      goalTitle: db.goalTitle,
-      title: db.title,
-      description: db.description,
-      order: db.order,
-      scheduledAt: _dateTimeToString(db.scheduledAt),
-      endAt: _dateTimeToString(db.endAt),
-      durationMinutes: db.durationMinutes,
-      status: db.status,
-      isLocked: db.isLocked,
-      notes: db.notes,
-      completedAt: db.completedAt != null
-          ? _dateTimeToString(db.completedAt!)
-          : null,
-    );
-  }
-
-  /// Converts API TaskModel to Drift companion for insertion.
-  TasksCompanion _modelToCompanion(TaskModel model) {
-    final now = DateTime.now();
-
-    return TasksCompanion(
-      id: Value(model.id),
-      goalId: Value(model.goalId),
-      goalTitle: Value(model.goalTitle),
-      title: Value(model.title),
-      description: Value(model.description),
-      order: Value(model.order),
-      scheduledAt: Value(_stringToDateTime(model.scheduledAt)),
-      endAt: Value(
-        model.endAt != null
-            ? _stringToDateTime(model.endAt!)
-            : _stringToDateTime(
-                model.scheduledAt,
-              ).add(Duration(minutes: model.durationMinutes ?? 60)),
-      ),
-      durationMinutes: Value(model.durationMinutes ?? 60),
-      status: Value(model.status),
-      isLocked: Value(model.isLocked),
-      notes: Value(model.notes),
-      completedAt: Value(
-        model.completedAt != null
-            ? _stringToDateTime(model.completedAt!)
-            : null,
-      ),
-      cachedAt: Value(now),
-    );
-  }
-
-  /// Converts DateTime to ISO8601 string (API format).
-  String _dateTimeToString(DateTime date) {
-    return date.toUtc().toIso8601String();
-  }
-
-  /// Parses ISO8601 string to DateTime.
-  DateTime _stringToDateTime(String str) {
-    return DateTime.parse(str).toLocal();
+    return dbTasks.map(dbToTaskModel).toList();
   }
 }

@@ -24,6 +24,7 @@ abstract final class ExportHelper {
         GoalStatus.draft => '📝 Borrador',
         GoalStatus.active => '🔵 Activa',
         GoalStatus.completed => '✅ Completada',
+        GoalStatus.archived => '📦 Archivada',
       };
 
       buffer

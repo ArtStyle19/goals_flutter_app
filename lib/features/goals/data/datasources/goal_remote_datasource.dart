@@ -97,6 +97,8 @@ class GoalRemoteDataSourceImpl implements GoalRemoteDataSource {
   Future<GoalModel> generateTasks(int goalId) {
     return _apiClient.post(
       ApiEndpoints.goalGenerate(goalId),
+      // Backend uses OpenAI for task generation, needs extended timeout
+      requestTimeout: EnvConfig.goalCreateTimeout,
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return GoalModel.fromJson(json['goal'] as Map<String, dynamic>);

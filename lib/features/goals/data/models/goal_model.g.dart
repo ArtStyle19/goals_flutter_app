@@ -18,7 +18,7 @@ GoalModel _$GoalModelFromJson(Map<String, dynamic> json) => GoalModel(
       .toList(),
   status: json['status'] as String,
   totalSessions: (json['total_sessions'] as num?)?.toInt(),
-  totalHours: _toDoubleNullable(json['total_hours']),
+  totalHours: safeDoubleNullable(json['total_hours']),
   completedAt: json['completed_at'] as String?,
   createdAt: json['created_at'] as String,
   updatedAt: json['updated_at'] as String,

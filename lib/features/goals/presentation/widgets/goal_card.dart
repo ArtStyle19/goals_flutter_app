@@ -121,12 +121,14 @@ class GoalCard extends StatelessWidget {
     GoalStatus.draft => AppColors.draft,
     GoalStatus.active => AppColors.active,
     GoalStatus.completed => AppColors.goalCompleted,
+    GoalStatus.archived => AppColors.archived,
   };
 
   IconData get _statusIcon => switch (goal.status) {
     GoalStatus.draft => Icons.edit_note,
     GoalStatus.active => Icons.flag,
     GoalStatus.completed => Icons.check_circle,
+    GoalStatus.archived => Icons.archive,
   };
 }
 
@@ -141,6 +143,7 @@ class _GoalStatusChip extends StatelessWidget {
       GoalStatus.draft => ('Borrador', AppColors.draft),
       GoalStatus.active => ('Activa', AppColors.active),
       GoalStatus.completed => ('Completada', AppColors.goalCompleted),
+      GoalStatus.archived => ('Archivada', AppColors.archived),
     };
 
     return Container(

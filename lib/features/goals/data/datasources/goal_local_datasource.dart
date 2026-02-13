@@ -6,6 +6,7 @@ library;
 
 import 'package:drift/drift.dart';
 import 'package:productivity/core/database/app_database.dart';
+import 'package:productivity/core/utils/json_converters.dart';
 import 'package:productivity/features/goals/data/models/availability_rule_model.dart';
 import 'package:productivity/features/goals/data/models/goal_model.dart';
 import 'package:productivity/features/tasks/data/datasources/task_local_datasource.dart';
@@ -170,12 +171,20 @@ class GoalLocalDataSourceImpl implements GoalLocalDataSource {
   // HELPER METHODS
   // ═══════════════════════════════════════════════════════════
 
-  /// Maps a list of DB goals to models with their rules.
+  /// Maps a list of DB goals to models with their rules and tasks.
+  /// Calculates task counts from cached tasks for accurate progress display.
   Future<List<GoalModel>> _mapGoalsWithRules(List<GoalDbModel> dbGoals) async {
     final result = <GoalModel>[];
     for (final dbGoal in dbGoals) {
       final rules = await _database.getRulesForGoal(dbGoal.id);
-      result.add(_dbToModel(dbGoal, rules));
+
+      // Fetch tasks from local cache if available to calculate accurate counts
+      List<TaskModel>? tasks;
+      if (_taskLocalDataSource != null) {
+        tasks = await _taskLocalDataSource!.getTasksForGoal(dbGoal.id);
+      }
+
+      result.add(_dbToModel(dbGoal, rules, tasks: tasks));
     }
     return result;
   }
@@ -200,24 +209,30 @@ class GoalLocalDataSourceImpl implements GoalLocalDataSource {
     List<AvailabilityRuleDbModel> dbRules, {
     List<TaskModel>? tasks,
   }) {
+    // Calculate task counts from cached tasks if available, otherwise use stored counts
+    final int calculatedTasksCount = tasks?.length ?? db.tasksCount;
+    final int calculatedCompletedCount = tasks != null
+        ? tasks.where((t) => t.status == 'completed').length
+        : db.completedTasksCount;
+
     return GoalModel(
       id: db.id,
       userId: null, // Not stored in local cache, fetched from remote
       title: db.title,
       description: db.description,
-      deadline: _dateTimeToString(db.deadline),
+      deadline: dateTimeToApiString(db.deadline),
       sessionDurationMinutes: db.sessionDurationMinutes,
       availabilityRules: dbRules.map(_dbRuleToModel).toList(),
       status: db.status,
       totalSessions: db.totalSessions,
       totalHours: db.totalHours,
       completedAt: db.completedAt != null
-          ? _dateTimeToString(db.completedAt!)
+          ? dateTimeToApiString(db.completedAt!)
           : null,
-      createdAt: _dateTimeToString(db.createdAt),
-      updatedAt: _dateTimeToString(db.updatedAt),
-      tasksCount: tasks?.length ?? db.tasksCount,
-      completedTasksCount: db.completedTasksCount,
+      createdAt: dateTimeToApiString(db.createdAt),
+      updatedAt: dateTimeToApiString(db.updatedAt),
+      tasksCount: calculatedTasksCount,
+      completedTasksCount: calculatedCompletedCount,
       tasks: tasks, // Tasks from local cache if available
     );
   }
@@ -233,18 +248,18 @@ class GoalLocalDataSourceImpl implements GoalLocalDataSource {
       id: Value(model.id),
       title: Value(model.title),
       description: Value(model.description),
-      deadline: Value(_stringToDateTime(model.deadline)),
+      deadline: Value(apiStringToDateTime(model.deadline)!),
       sessionDurationMinutes: Value(model.sessionDurationMinutes),
       status: Value(model.status),
       totalSessions: Value(model.totalSessions),
       totalHours: Value(model.totalHours),
       completedAt: Value(
         model.completedAt != null
-            ? _stringToDateTime(model.completedAt!)
+            ? apiStringToDateTime(model.completedAt!)
             : null,
       ),
-      createdAt: Value(_stringToDateTime(model.createdAt)),
-      updatedAt: Value(_stringToDateTime(model.updatedAt)),
+      createdAt: Value(apiStringToDateTime(model.createdAt)!),
+      updatedAt: Value(apiStringToDateTime(model.updatedAt)!),
       tasksCount: Value(model.tasksCount ?? 0),
       completedTasksCount: Value(model.completedTasksCount ?? 0),
       cachedAt: Value(DateTime.now()),
@@ -262,15 +277,5 @@ class GoalLocalDataSourceImpl implements GoalLocalDataSource {
       start: Value(model.start),
       end: Value(model.end),
     );
-  }
-
-  /// Converts DateTime to ISO8601 string (API format).
-  String _dateTimeToString(DateTime date) {
-    return date.toUtc().toIso8601String();
-  }
-
-  /// Parses ISO8601 string to DateTime.
-  DateTime _stringToDateTime(String str) {
-    return DateTime.parse(str).toLocal();
   }
 }

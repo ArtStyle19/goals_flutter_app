@@ -2,25 +2,28 @@
 ///
 /// Storing as INTEGER (Unix timestamp) is more efficient than TEXT (ISO8601)
 /// and allows for easy date comparisons and indexing in SQL.
+///
+/// Uses centralized utilities from [json_converters.dart] to ensure
+/// consistency across the entire app and avoid code duplication.
 library;
 
 import 'package:drift/drift.dart';
+import 'package:productivity/core/utils/json_converters.dart';
 
 /// Converts DateTime to Unix timestamp (seconds since epoch) for storage.
+///
+/// Delegates to centralized [unixSecondsToDateTime] and [dateTimeToUnixSeconds]
+/// to ensure consistent DateTime handling across all layers.
 final class DateTimeConverter extends TypeConverter<DateTime, int> {
   const DateTimeConverter();
 
   @override
   DateTime fromSql(int fromDb) {
-    return DateTime.fromMillisecondsSinceEpoch(
-      fromDb * 1000,
-      isUtc: true,
-    ).toLocal();
+    return unixSecondsToDateTime(fromDb);
   }
 
   @override
   int toSql(DateTime value) {
-    // Store in UTC to avoid timezone issues, convert to local on retrieval
-    return value.toUtc().millisecondsSinceEpoch ~/ 1000;
+    return dateTimeToUnixSeconds(value);
   }
 }

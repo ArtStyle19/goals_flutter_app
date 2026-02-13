@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:productivity/core/error/exceptions.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/features/calendar/data/datasources/calendar_local_datasource.dart';
@@ -25,8 +24,17 @@ class CalendarRepositoryImpl implements CalendarRepository {
     required DateTime from,
     required DateTime to,
   }) async {
+    // Try cache first for immediate response (offline-first)
+    final cachedTasks = await _localDataSource.getTasksInRange(from, to);
+    if (cachedTasks.isNotEmpty) {
+      return (
+        tasks: cachedTasks.map((t) => t.toEntity()).toList(),
+        total: cachedTasks.length,
+      );
+    }
+
+    // Cache miss - fetch from remote and cache
     try {
-      // Try remote first for fresh data
       final result = await _remoteDataSource.getCalendar(
         from: AppDateUtils.toApiDate(from),
         to: AppDateUtils.toApiDate(to),
@@ -38,14 +46,7 @@ class CalendarRepositoryImpl implements CalendarRepository {
         total: result.total,
       );
     } on NetworkException catch (_) {
-      // Fallback to cache on network error
-      final cachedTasks = await _localDataSource.getTasksInRange(from, to);
-      if (cachedTasks.isNotEmpty) {
-        return (
-          tasks: cachedTasks.map((t) => t.toEntity()).toList(),
-          total: cachedTasks.length,
-        );
-      }
+      // No cache available and network failed
       rethrow;
     }
   }
@@ -61,8 +62,25 @@ class CalendarRepositoryImpl implements CalendarRepository {
     })
   >
   getToday() async {
+    // Try cache first for immediate response (offline-first)
+    final cachedTasks = await _localDataSource.getTodayTasks();
+    if (cachedTasks.isNotEmpty) {
+      // Calculate totals from cached tasks
+      final totalMinutes = cachedTasks.fold<int>(
+        0,
+        (sum, t) => sum + (t.durationMinutes ?? 60),
+      );
+      return (
+        date: AppDateUtils.toApiDate(DateTime.now()),
+        tasks: cachedTasks.map((t) => t.toEntity()).toList(),
+        totalTasks: cachedTasks.length,
+        totalMinutes: totalMinutes,
+        totalHours: totalMinutes / 60.0,
+      );
+    }
+
+    // Cache miss - fetch from remote and cache
     try {
-      // Try remote first for fresh data
       final result = await _remoteDataSource.getToday();
       // Cache today's tasks
       await _localDataSource.cacheTodayTasks(result.tasks);
@@ -74,65 +92,66 @@ class CalendarRepositoryImpl implements CalendarRepository {
         totalHours: result.totalHours,
       );
     } on NetworkException catch (_) {
-      // Fallback to cache on network error
-      final cachedTasks = await _localDataSource.getTodayTasks();
-      if (cachedTasks.isNotEmpty) {
-        // Calculate totals from cached tasks
-        final totalMinutes = cachedTasks.fold<int>(
-          0,
-          (sum, t) => sum + (t.durationMinutes ?? 60),
-        );
-        return (
-          date: AppDateUtils.toApiDate(DateTime.now()),
-          tasks: cachedTasks.map((t) => t.toEntity()).toList(),
-          totalTasks: cachedTasks.length,
-          totalMinutes: totalMinutes,
-          totalHours: totalMinutes / 60.0,
-        );
-      }
+      // No cache available and network failed
       rethrow;
     }
   }
 
   @override
   Future<({TaskEntity? task, String? startsIn})> getNextTask() async {
+    // Try cache first for immediate response (offline-first)
+    final cachedTask = await _localDataSource.getNextUpcomingTask();
+    if (cachedTask != null) {
+      // Calculate startsIn from the cached task's scheduled time
+      // scheduledAt is a String (API format), parse to DateTime
+      final scheduledAt = DateTime.parse(cachedTask.scheduledAt);
+      final startsIn = _calculateStartsIn(scheduledAt);
+      return (task: cachedTask.toEntity(), startsIn: startsIn);
+    }
+
+    // Cache miss - fetch from remote and cache
     try {
-      // Try remote first for fresh data
-      debugPrint('CalendarRepository: Fetching next task from remote...');
       final result = await _remoteDataSource.getNextTask();
-      debugPrint(
-        'CalendarRepository: Remote result - task: ${result.task != null}, startsIn: ${result.startsIn}',
-      );
 
       // Cache the next task if exists
       if (result.task != null) {
         await _localDataSource.cacheCalendarTasks([result.task!]);
-        debugPrint('CalendarRepository: Cached next task');
-      } else {
-        debugPrint('CalendarRepository: No task returned from remote');
       }
 
       return (task: result.task?.toEntity(), startsIn: result.startsIn);
-    } on NetworkException catch (e) {
-      debugPrint(
-        'CalendarRepository: NetworkException - falling back to cache: $e',
-      );
-      // Fallback to cache on network error
-      final cachedTask = await _localDataSource.getNextUpcomingTask();
-      debugPrint(
-        'CalendarRepository: Cache fallback - found: ${cachedTask != null}',
-      );
+    } on NetworkException catch (_) {
+      // No cache available and network failed
+      rethrow;
+    }
+  }
 
-      if (cachedTask != null) {
-        return (
-          task: cachedTask.toEntity(),
-          startsIn: null, // Can't calculate startsIn from cache
-        );
+  /// Calculates the time remaining until a task starts.
+  /// Returns a human-readable string like "En 30 min" or "En 2 hrs".
+  ///
+  /// The [scheduledAt] parameter should be in UTC (API format) and will be
+  /// converted to local time for comparison with the current time.
+  String? _calculateStartsIn(DateTime scheduledAt) {
+    // Convert UTC scheduled time to local time
+    final scheduledLocal = scheduledAt.toLocal();
+    final now = DateTime.now();
+    final difference = scheduledLocal.difference(now);
+
+    if (difference.isNegative) {
+      return 'Ahora';
+    }
+
+    if (difference.inMinutes < 60) {
+      return 'En ${difference.inMinutes} min';
+    } else if (difference.inHours < 24) {
+      final hours = difference.inHours;
+      final minutes = difference.inMinutes % 60;
+      if (minutes > 0) {
+        return 'En ${hours}h ${minutes}m';
       }
-      rethrow;
-    } catch (e) {
-      debugPrint('CalendarRepository: Unexpected error in getNextTask: $e');
-      rethrow;
+      return 'En ${hours} hrs';
+    } else {
+      final days = difference.inDays;
+      return 'En ${days} días';
     }
   }
 }
