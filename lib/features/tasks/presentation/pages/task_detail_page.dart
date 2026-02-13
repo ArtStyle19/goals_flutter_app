@@ -92,7 +92,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
           return RefreshIndicator(
             onRefresh: () async {
               _notesEdited = false;
-              await ref.refresh(taskDetailProvider(widget.taskId));
+              ref.invalidate(taskDetailProvider(widget.taskId));
             },
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -289,7 +289,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       // Dismiss ongoing notification for this task.
       await ref.read(notificationServiceProvider).dismissOngoingTask(task.id);
 
-      await ref.refresh(taskDetailProvider(widget.taskId));
+      ref.invalidate(taskDetailProvider(widget.taskId));
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -312,7 +312,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       switch (action) {
         case 'lock':
           await ref.read(taskActionsProvider.notifier).lockTask(task.id);
-          await ref.refresh(taskDetailProvider(widget.taskId));
+          ref.invalidate(taskDetailProvider(widget.taskId));
           if (mounted) {
             ScaffoldMessenger.of(
               context,
@@ -320,7 +320,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
           }
         case 'unlock':
           await ref.read(taskActionsProvider.notifier).unlockTask(task.id);
-          await ref.refresh(taskDetailProvider(widget.taskId));
+          ref.invalidate(taskDetailProvider(widget.taskId));
           if (mounted) {
             ScaffoldMessenger.of(
               context,
@@ -337,7 +337,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
           if (!confirmed || !context.mounted) return;
 
           await ref.read(taskActionsProvider.notifier).skipTask(task.id);
-          await ref.refresh(taskDetailProvider(widget.taskId));
+          ref.invalidate(taskDetailProvider(widget.taskId));
           if (mounted) {
             ScaffoldMessenger.of(
               context,
@@ -361,8 +361,10 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       await ref
           .read(taskActionsProvider.notifier)
           .updateNotes(task.id, _notesController.text.trim());
-      await ref.refresh(taskDetailProvider(widget.taskId));
+      ref.invalidate(taskDetailProvider(widget.taskId));
+
       setState(() => _notesEdited = false);
+
       if (mounted) {
         ScaffoldMessenger.of(
           context,

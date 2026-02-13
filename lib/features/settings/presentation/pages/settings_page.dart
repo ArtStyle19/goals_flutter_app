@@ -208,6 +208,7 @@ class SettingsPage extends ConsumerWidget {
     if (!confirmed || !context.mounted) return;
 
     await ref.read(authProvider.notifier).logout();
+    if (!context.mounted) return;
     context.go(AppRoutes.login);
   }
 }

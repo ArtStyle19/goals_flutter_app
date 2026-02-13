@@ -7,7 +7,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/features/calendar/domain/repositories/calendar_repository.dart';
+import 'package:productivity/features/calendar/presentation/state/calendar_sync_provider.dart';
 import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
+
+// ═══════════════════════════════════════════════════════════
+// CALENDAR REFRESH TRIGGER
+// ═══════════════════════════════════════════════════════════
+
+/// Provider to trigger calendar refresh from anywhere in the app.
+/// Increment this to force all calendar providers to rebuild.
+final calendarRefreshTriggerProvider = StateProvider<int>((ref) => 0);
+
+/// Helper to trigger calendar refresh globally.
+/// Works with any Ref type (WidgetRef, Ref, ProviderRef, etc.)
+void refreshCalendar(Ref ref) {
+  ref.read(calendarRefreshTriggerProvider.notifier).state++;
+}
 
 // ═══════════════════════════════════════════════════════════
 // CALENDAR TASKS NOTIFIER
@@ -28,22 +43,32 @@ class CalendarTasksNotifier
           ({List<TaskEntity> tasks, int total}),
           ({DateTime from, DateTime to})
         > {
-  late final CalendarRepository _repository;
-
   @override
   Future<({List<TaskEntity> tasks, int total})> build(
     ({DateTime from, DateTime to}) arg,
   ) async {
-    _repository = ref.read(calendarRepositoryProvider);
-    return _repository.getCalendar(from: arg.from, to: arg.to);
+    // Watch refresh trigger to rebuild when calendar needs refresh
+    ref.watch(calendarRefreshTriggerProvider);
+
+    final repository = ref.watch(calendarRepositoryProvider);
+    final result = await repository.getCalendar(from: arg.from, to: arg.to);
+
+    // Mark sync timestamp on successful fetch
+    ref.read(calendarSyncNotifierProvider.notifier).markSynced();
+
+    return result;
   }
 
   /// Refreshes the calendar data.
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
-      () => _repository.getCalendar(from: arg.from, to: arg.to),
-    );
+    state = await AsyncValue.guard(() async {
+      final repository = ref.read(calendarRepositoryProvider);
+      final result = await repository.getCalendar(from: arg.from, to: arg.to);
+      // Mark sync on refresh too
+      ref.read(calendarSyncNotifierProvider.notifier).markSynced();
+      return result;
+    });
   }
 }
 
@@ -76,8 +101,6 @@ class TodayNotifier
             double totalHours,
           })
         > {
-  late final CalendarRepository _repository;
-
   @override
   Future<
     ({
@@ -89,14 +112,27 @@ class TodayNotifier
     })
   >
   build() async {
-    _repository = ref.read(calendarRepositoryProvider);
-    return _repository.getToday();
+    // Watch the repository to rebuild when dependencies change
+    final repository = ref.watch(calendarRepositoryProvider);
+
+    final result = await repository.getToday();
+
+    // Mark sync timestamp on successful fetch
+    ref.read(calendarSyncNotifierProvider.notifier).markSynced();
+
+    return result;
   }
 
   /// Refreshes today's data.
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _repository.getToday());
+    state = await AsyncValue.guard(() async {
+      final repository = ref.read(calendarRepositoryProvider);
+      final result = await repository.getToday();
+      // Mark sync on refresh too
+      ref.read(calendarSyncNotifierProvider.notifier).markSynced();
+      return result;
+    });
   }
 }
 
@@ -114,17 +150,28 @@ final nextTaskProvider =
 /// Manages the next upcoming task data.
 class NextTaskNotifier
     extends AsyncNotifier<({TaskEntity? task, String? startsIn})> {
-  late final CalendarRepository _repository;
-
   @override
   Future<({TaskEntity? task, String? startsIn})> build() async {
-    _repository = ref.read(calendarRepositoryProvider);
-    return _repository.getNextTask();
+    // Watch the repository to rebuild when dependencies change
+    final repository = ref.watch(calendarRepositoryProvider);
+
+    final result = await repository.getNextTask();
+
+    // Mark sync timestamp on successful fetch
+    ref.read(calendarSyncNotifierProvider.notifier).markSynced();
+
+    return result;
   }
 
   /// Refreshes the next task data.
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _repository.getNextTask());
+    state = await AsyncValue.guard(() async {
+      final repository = ref.read(calendarRepositoryProvider);
+      final result = await repository.getNextTask();
+      // Mark sync on refresh too
+      ref.read(calendarSyncNotifierProvider.notifier).markSynced();
+      return result;
+    });
   }
 }

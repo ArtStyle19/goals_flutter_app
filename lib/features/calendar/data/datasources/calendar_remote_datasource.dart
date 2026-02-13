@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:productivity/core/network/api_client.dart';
 import 'package:productivity/core/network/api_endpoints.dart';
 import 'package:productivity/features/tasks/data/models/task_model.dart';
@@ -97,13 +98,48 @@ class CalendarRemoteDataSourceImpl implements CalendarRemoteDataSource {
     return _apiClient.get(
       ApiEndpoints.nextTask,
       parser: (data) {
-        final json = data as Map<String, dynamic>;
+        debugPrint('CalendarRemote: Raw response data: $data');
+
+        // Handle null or empty response
+        if (data == null) {
+          debugPrint('CalendarRemote: Response is null');
+          return (task: null, startsIn: null);
+        }
+
+        final json = data as Map<String, dynamic>?;
+        if (json == null) {
+          debugPrint('CalendarRemote: Response is not a Map');
+          return (task: null, startsIn: null);
+        }
+
+        debugPrint('CalendarRemote: Response keys: ${json.keys.toList()}');
+
         final taskJson = json['task'];
+        debugPrint(
+          'CalendarRemote: taskJson type: ${taskJson?.runtimeType}, value: $taskJson',
+        );
+
         TaskModel? task;
         if (taskJson != null && taskJson is Map<String, dynamic>) {
-          task = TaskModel.fromJson(taskJson);
+          debugPrint('CalendarRemote: Parsing task with id: ${taskJson['id']}');
+          try {
+            task = TaskModel.fromJson(taskJson);
+            debugPrint(
+              'CalendarRemote: Task parsed successfully: ${task.title}',
+            );
+          } catch (e, stackTrace) {
+            debugPrint('CalendarRemote: Error parsing next task: $e');
+            debugPrint('CalendarRemote: Stack trace: $stackTrace');
+            task = null;
+          }
+        } else {
+          debugPrint('CalendarRemote: taskJson is null or not a Map');
         }
-        return (task: task, startsIn: json['starts_in'] as String?);
+
+        final startsIn = json['starts_in'] as String?;
+        debugPrint('CalendarRemote: starts_in: $startsIn');
+
+        return (task: task, startsIn: startsIn);
       },
     );
   }

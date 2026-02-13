@@ -33,7 +33,7 @@ class TaskRemoteDataSourceImpl implements TaskRemoteDataSource {
   Future<TaskModel> updateTask(int id, {String? notes}) {
     return _apiClient.put(
       ApiEndpoints.task(id),
-      data: {if (notes != null) 'notes': notes},
+      data: {'notes': notes}..removeWhere((_, value) => value == null),
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return TaskModel.fromJson(json['task'] as Map<String, dynamic>);
@@ -45,7 +45,7 @@ class TaskRemoteDataSourceImpl implements TaskRemoteDataSource {
   Future<TaskModel> completeTask(int id, {String? notes}) {
     return _apiClient.post(
       ApiEndpoints.taskComplete(id),
-      data: {if (notes != null) 'notes': notes},
+      data: {'notes': notes}..removeWhere((_, value) => value == null),
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return TaskModel.fromJson(json['task'] as Map<String, dynamic>);
@@ -57,7 +57,7 @@ class TaskRemoteDataSourceImpl implements TaskRemoteDataSource {
   Future<TaskModel> skipTask(int id, {String? reason}) {
     return _apiClient.post(
       ApiEndpoints.taskSkip(id),
-      data: {if (reason != null) 'reason': reason},
+      data: {'reason': reason}..removeWhere((_, value) => value == null),
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return TaskModel.fromJson(json['task'] as Map<String, dynamic>);

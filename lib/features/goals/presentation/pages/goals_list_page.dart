@@ -6,8 +6,10 @@ import 'package:productivity/app/router/routes.dart';
 import 'package:productivity/core/error/error_handler.dart';
 import 'package:productivity/core/widgets/app_error_widget.dart';
 import 'package:productivity/core/widgets/empty_state_widget.dart';
+import 'package:productivity/core/widgets/last_sync_indicator.dart';
 import 'package:productivity/core/widgets/loading_widget.dart';
 import 'package:productivity/features/goals/presentation/state/goals_provider.dart';
+import 'package:productivity/features/goals/presentation/state/goals_sync_provider.dart';
 import 'package:productivity/features/goals/presentation/widgets/goal_card.dart';
 
 /// Main dashboard page showing all goals.
@@ -17,11 +19,23 @@ class GoalsListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final goalsAsync = ref.watch(goalsProvider);
+    final lastSync = ref.watch(goalsLastSyncProvider);
+    final isLoading = goalsAsync is AsyncLoading;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mis Metas'),
         actions: [
+          // Last sync indicator
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: LastSyncIndicator(
+                timestamp: lastSync,
+                isLoading: isLoading,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Configuración',

@@ -79,10 +79,8 @@ class GoalRemoteDataSourceImpl implements GoalRemoteDataSource {
   Future<GoalModel> updateGoal(int id, {String? title, String? description}) {
     return _apiClient.put(
       ApiEndpoints.goal(id),
-      data: {
-        if (title != null) 'title': title,
-        if (description != null) 'description': description,
-      },
+      data: {'title': title, 'description': description}
+        ..removeWhere((_, value) => value == null),
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return GoalModel.fromJson(json['goal'] as Map<String, dynamic>);

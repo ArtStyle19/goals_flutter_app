@@ -9,7 +9,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:productivity/app/config/app_config.dart';
-import 'package:productivity/app/config/env_config.dart';
+import 'package:productivity/core/constants/api_constants.dart';
+import 'package:productivity/core/database/app_database.dart';
 import 'package:productivity/core/network/api_client.dart';
 import 'package:productivity/core/network/api_interceptors.dart';
 
@@ -20,16 +21,19 @@ import 'package:productivity/features/auth/data/repositories/auth_repository_imp
 import 'package:productivity/features/auth/domain/repositories/auth_repository.dart';
 
 // ─── Goals imports ────────────────────────────────────────
+import 'package:productivity/features/goals/data/datasources/goal_local_datasource.dart';
 import 'package:productivity/features/goals/data/datasources/goal_remote_datasource.dart';
 import 'package:productivity/features/goals/data/repositories/goal_repository_impl.dart';
 import 'package:productivity/features/goals/domain/repositories/goal_repository.dart';
 
 // ─── Tasks imports ────────────────────────────────────────
+import 'package:productivity/features/tasks/data/datasources/task_local_datasource.dart';
 import 'package:productivity/features/tasks/data/datasources/task_remote_datasource.dart';
 import 'package:productivity/features/tasks/data/repositories/task_repository_impl.dart';
 import 'package:productivity/features/tasks/domain/repositories/task_repository.dart';
 
 // ─── Calendar imports ─────────────────────────────────────
+import 'package:productivity/features/calendar/data/datasources/calendar_local_datasource.dart';
 import 'package:productivity/features/calendar/data/datasources/calendar_remote_datasource.dart';
 import 'package:productivity/features/calendar/data/repositories/calendar_repository_impl.dart';
 import 'package:productivity/features/calendar/domain/repositories/calendar_repository.dart';
@@ -47,12 +51,20 @@ final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
 final secureStorageProvider = Provider<FlutterSecureStorage>((ref) {
   return const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
   );
 });
 
-/// Singleton timezone interceptor — initialized at app startup.
+/// Database provider - singleton instance.
+final appDatabaseProvider = Provider<AppDatabase>((ref) {
+  return AppDatabase();
+});
+
+/// Timezone interceptor for API requests.
 final timezoneInterceptorProvider = Provider<TimezoneInterceptor>((ref) {
-  return TimezoneInterceptor();
+  throw UnimplementedError('TimezoneInterceptor must be overridden at startup');
 });
 
 /// Dio HTTP client with interceptors.
@@ -63,8 +75,8 @@ final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: EnvConfig.apiConnectTimeout,
-      receiveTimeout: EnvConfig.apiReceiveTimeout,
+      connectTimeout: ApiConstants.connectTimeout,
+      receiveTimeout: ApiConstants.receiveTimeout,
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
@@ -116,8 +128,19 @@ final goalRemoteDataSourceProvider = Provider<GoalRemoteDataSource>((ref) {
   return GoalRemoteDataSourceImpl(ref.watch(apiClientProvider));
 });
 
+final goalLocalDataSourceProvider = Provider<GoalLocalDataSource>((ref) {
+  return GoalLocalDataSourceImpl(
+    ref.watch(appDatabaseProvider),
+    taskLocalDataSource: ref.watch(taskLocalDataSourceProvider),
+  );
+});
+
 final goalRepositoryProvider = Provider<GoalRepository>((ref) {
-  return GoalRepositoryImpl(ref.watch(goalRemoteDataSourceProvider));
+  return GoalRepositoryImpl(
+    remoteDataSource: ref.watch(goalRemoteDataSourceProvider),
+    localDataSource: ref.watch(goalLocalDataSourceProvider),
+    taskLocalDataSource: ref.watch(taskLocalDataSourceProvider),
+  );
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -128,8 +151,16 @@ final taskRemoteDataSourceProvider = Provider<TaskRemoteDataSource>((ref) {
   return TaskRemoteDataSourceImpl(ref.watch(apiClientProvider));
 });
 
+final taskLocalDataSourceProvider = Provider<TaskLocalDataSource>((ref) {
+  return TaskLocalDataSourceImpl(ref.watch(appDatabaseProvider));
+});
+
 final taskRepositoryProvider = Provider<TaskRepository>((ref) {
-  return TaskRepositoryImpl(ref.watch(taskRemoteDataSourceProvider));
+  return TaskRepositoryImpl(
+    remoteDataSource: ref.watch(taskRemoteDataSourceProvider),
+    localDataSource: ref.watch(taskLocalDataSourceProvider),
+    calendarLocalDataSource: ref.watch(calendarLocalDataSourceProvider),
+  );
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -142,6 +173,15 @@ final calendarRemoteDataSourceProvider = Provider<CalendarRemoteDataSource>((
   return CalendarRemoteDataSourceImpl(ref.watch(apiClientProvider));
 });
 
+final calendarLocalDataSourceProvider = Provider<CalendarLocalDataSource>((
+  ref,
+) {
+  return CalendarLocalDataSourceImpl(ref.watch(appDatabaseProvider));
+});
+
 final calendarRepositoryProvider = Provider<CalendarRepository>((ref) {
-  return CalendarRepositoryImpl(ref.watch(calendarRemoteDataSourceProvider));
+  return CalendarRepositoryImpl(
+    remoteDataSource: ref.watch(calendarRemoteDataSourceProvider),
+    localDataSource: ref.watch(calendarLocalDataSourceProvider),
+  );
 });

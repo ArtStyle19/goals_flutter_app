@@ -29,29 +29,47 @@ int? _safeIntNullable(dynamic v) {
   return null;
 }
 
+/// Safely converts nullable dynamic to String with fallback.
+String _safeString(dynamic v, [String fallback = '']) {
+  if (v == null) return fallback;
+  if (v is String) return v;
+  return v.toString();
+}
+
+/// Safely converts nullable dynamic to nullable String.
+String? _safeStringNullable(dynamic v) {
+  if (v == null) return null;
+  if (v is String) return v;
+  return v.toString();
+}
+
 /// DTO for Task data from the API.
 @JsonSerializable()
 class TaskModel {
   final int id;
   @JsonKey(name: 'goal_id')
   final int goalId;
-  @JsonKey(name: 'goal_title')
+  @JsonKey(name: 'goal_title', fromJson: _safeStringNullable)
   final String? goalTitle;
+  @JsonKey(fromJson: _safeString)
   final String title;
+  @JsonKey(fromJson: _safeStringNullable)
   final String? description;
   @JsonKey(fromJson: _safeInt)
   final int order;
-  @JsonKey(name: 'scheduled_at')
+  @JsonKey(name: 'scheduled_at', fromJson: _safeString)
   final String scheduledAt;
-  @JsonKey(name: 'end_at')
+  @JsonKey(name: 'end_at', fromJson: _safeStringNullable)
   final String? endAt;
   @JsonKey(name: 'duration_minutes', fromJson: _safeIntNullable)
   final int? durationMinutes;
+  @JsonKey(fromJson: _safeString)
   final String status;
   @JsonKey(name: 'is_locked', fromJson: _safeBool)
   final bool isLocked;
+  @JsonKey(fromJson: _safeStringNullable)
   final String? notes;
-  @JsonKey(name: 'completed_at')
+  @JsonKey(name: 'completed_at', fromJson: _safeStringNullable)
   final String? completedAt;
 
   const TaskModel({
@@ -61,10 +79,10 @@ class TaskModel {
     required this.title,
     this.description,
     this.order = 0,
-    required this.scheduledAt,
+    this.scheduledAt = '',
     this.endAt,
     this.durationMinutes,
-    required this.status,
+    this.status = 'scheduled',
     this.isLocked = false,
     this.notes,
     this.completedAt,
@@ -85,9 +103,12 @@ class TaskModel {
   /// include `duration_minutes` (e.g. nested tasks inside a goal detail).
   /// Defaults to 60 if neither `durationMinutes` nor the fallback is set.
   TaskEntity toEntity({int? fallbackDurationMinutes}) {
-    final scheduled = DateTime.parse(scheduledAt).toLocal();
+    // Handle empty scheduledAt - use current time as fallback
+    final scheduled = scheduledAt.isNotEmpty
+        ? DateTime.parse(scheduledAt).toLocal()
+        : DateTime.now();
     final duration = durationMinutes ?? fallbackDurationMinutes ?? 60;
-    final end = endAt != null
+    final end = endAt != null && endAt!.isNotEmpty
         ? DateTime.parse(endAt!).toLocal()
         : scheduled.add(Duration(minutes: duration));
 
@@ -107,7 +128,7 @@ class TaskModel {
       ),
       isLocked: isLocked,
       notes: notes,
-      completedAt: completedAt != null
+      completedAt: completedAt != null && completedAt!.isNotEmpty
           ? DateTime.parse(completedAt!).toLocal()
           : null,
     );

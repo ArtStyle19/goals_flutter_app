@@ -8,8 +8,10 @@ import 'package:productivity/app/theme/app_colors.dart';
 import 'package:productivity/core/error/error_handler.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/core/widgets/app_error_widget.dart';
+import 'package:productivity/core/widgets/last_sync_indicator.dart';
 import 'package:productivity/core/widgets/loading_widget.dart';
 import 'package:productivity/features/calendar/presentation/state/calendar_provider.dart';
+import 'package:productivity/features/calendar/presentation/state/calendar_sync_provider.dart';
 import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
 
 /// Calendar page with monthly view and task list per day.
@@ -41,11 +43,23 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     final calendarAsync = ref.watch(calendarTasksProvider(_currentRange));
+    final lastSync = ref.watch(calendarLastSyncProvider);
+    final isLoading = calendarAsync is AsyncLoading;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Calendario'),
         actions: [
+          // Last sync indicator
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: LastSyncIndicator(
+                timestamp: lastSync,
+                isLoading: isLoading,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () async => await ref

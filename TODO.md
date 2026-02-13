@@ -1,141 +1,150 @@
-# Implementación de Sistema de Manejo de Errores - Resumen
+# Correcciones Completadas - Productivity App
 
-## ✅ Completado
+## ✅ Críticos (Bloquean compilación/funcionamiento)
 
-### 1. Corrección de Error de Sintaxis
+- [x] 1. Corregir error de sintaxis en `injection_container.dart` (`Provider<FlNaN`)
+- [x] 2. Completar código truncado en `app_router.dart` (`SlideTransNaN`) - Verificado: código ya estaba completo
+- [x] 3. Registrar datasources locales faltantes en DI container
+- [x] 4. Unificar providers de autenticación - Se mantiene `authProvider` como principal
 
-- **Archivo**: `lib/features/goals/data/datasources/goal_remote_datasource.dart`
-- **Problema**: Sintaxis inválida `{'title': ?title, 'description': ?description}`
-- **Solución**: Corregido a sintaxis válida con null-check condicional:
-  ```dart
-  data: {
-    if (title != null) 'title': title,
-    if (description != null) 'description': description,
-  },
-  ```
+## ✅ Funcionales (Problemas reportados por usuario)
 
-### 2. Sistema de Estado UI (Clean Architecture + BLoC)
+- [x] 5. **Problema 1: Tareas no se cachean en modo offline**
+  - ✅ Modificar `GoalLocalDataSource.getGoal()` para obtener tareas desde caché local
+  - ✅ Agregar método `getTasksForGoal()` en `TaskLocalDataSource`
+  - ✅ Agregar método `getTasksByGoalId()` en `AppDatabase`
+  - ✅ Inyectar `TaskLocalDataSource` en `GoalLocalDataSourceImpl`
+  - ✅ Actualizar `_dbToModel()` para incluir tareas en el modelo
+- [x] 6. **Problema 2: Sincronización aparece como "sin sincronizar"**
+  - ✅ Corregir `SyncNotifier` para actualizar también el `StateProvider`
+  - ✅ Pasar `Ref` y `StateProvider` al constructor de `SyncNotifier`
+  - ✅ Sincronizar estado entre `SyncNotifier` y `timestampProvider`
+- [x] 7. **Problema 3: Próxima tarea solo funciona en offline**
+  - ✅ Agregar manejo robusto de respuestas nulas en `getNextTask()`
+  - ✅ Agregar logging con `debugPrint` para debugging
+  - ✅ Manejar casos donde el servidor retorna respuesta vacía
+  - ✅ Agregar UI de estado vacío con botón de reintentar en `today_page.dart`
+  - ✅ Agregar logging detallado en `CalendarRepositoryImpl.getNextTask()`
+  - ✅ **FIX CRÍTICO**: Hacer `TaskModel` robusto contra campos null del backend
+    - Agregados helpers `_safeString()` y `_safeStringNullable()`
+    - Todos los campos String ahora usan safe converters
+    - `scheduledAt` y `status` tienen valores por defecto
+    - `toEntity()` maneja strings vacíos gracefully
+  - ✅ **FIX CRÍTICO**: Actualizar `task_model.g.dart` para usar safe converters
+    - El archivo generado no usaba los helpers safe
+    - Causaba `type 'Null' is not a subtype of type 'String' in type cast`
+    - Ahora usa `_safeString()`, `_safeStringNullable()`, `_safeInt()`, `_safeBool()`
+- [x] 8. **Problema 4: Completar tarea no actualiza Goal Detail / Today / Calendar**
+  - ✅ Agregar invalidación de `goalDetailProvider(goalId)` en `_invalidateTaskProviders()`
+  - ✅ Agregar invalidación de `goalsProvider` para actualizar progreso
+  - ✅ Pasar `goalId` a la función de invalidación
+  - ✅ Remover invalidación de `calendarTasksProvider` (causaba error)
+  - ✅ **FIX CRÍTICO**: Sincronizar caché de calendario al completar tarea
+    - `TaskRepositoryImpl` ahora recibe `CalendarLocalDataSource`
+    - `completeTask()` y `skipTask()` actualizan AMBOS cachés (task + calendar)
+    - Esto asegura que Today y Calendar muestren datos actualizados inmediatamente
+  - ✅ **FIX CRÍTICO**: Usar `refresh()` en lugar de `invalidate()` para AsyncNotifiers
+    - `ref.read(todayProvider.notifier).refresh()` en lugar de `invalidate()`
+    - `ref.read(nextTaskProvider.notifier).refresh()` en lugar de `invalidate()`
+    - Los AsyncNotifiers necesitan refresh() para reconstruirse con nuevos datos
+  - ✅ **FIX CRÍTICO**: Sistema de trigger global para calendario
+    - `calendarRefreshTriggerProvider` - StateProvider<int> para forzar rebuilds
+    - `refreshCalendar(Ref ref)` - función helper para trigger desde cualquier lugar
+    - `CalendarTasksNotifier` hace `ref.watch(calendarRefreshTriggerProvider)`
+    - Esto fuerza rebuild de TODAS las instancias de calendario en la app
 
-- **Archivo**: `lib/core/state/ui_state.dart`
-- **Implementación**:
-  - Clases sealed `UiState<T>` con estados: `initial`, `loading`, `success`, `error`
-  - Clases sealed `Failure` con tipos específicos: `ServerFailure`, `NetworkFailure`, `UnauthorizedFailure`, `ValidationFailure`, `NotFoundFailure`, `CacheFailure`, `UnknownFailure`
-  - Extension `AppExceptionToFailure` para convertir excepciones a failures
-  - Mensajes de error amigables para el usuario
-  - Soporte para reintentos (`isRetryable`)
+## 🟢 Mejoras Adicionales (Robustez y mantenibilidad)
 
-### 3. BLoC para Goals (Manejo Completo de Errores)
+- [x] 9. Agregar manejo de errores en `CalendarRemoteDataSource`
+- [x] 10. Estructura de DI container mejorada con todos los providers locales
+- [x] 11. Arquitectura offline-first completamente funcional
+- [x] 12. UI mejorada para "Sin próxima tarea" con opción de reintentar
 
-- **Archivo**: `lib/features/goals/presentation/state/goals_bloc.dart`
-- **Características**:
-  - `GoalsBloc`: Manejo de lista de metas con CRUD completo
-  - `GoalDetailBloc`: Manejo de detalle individual
-  - `GoalStatsBloc`: Manejo de estadísticas
-  - **Manejo de errores en cada operación**:
-    - Try-catch en todos los métodos CRUD
-    - Preservación de datos previos en caso de error (optimistic updates)
-    - Estados de carga que nunca se quedan "pegados"
-    - Métodos `clearError()` y `retry()` para recuperación
-  - **Operaciones soportadas**:
-    - `loadGoals()`, `refresh()`
-    - `createGoal()`, `updateGoal()`, `deleteGoal()`
-    - `generateTasks()`, `completeGoal()`
+---
 
-### 4. Widgets Reutilizables para Manejo de Estado
+## 📁 Archivos Modificados
 
-- **Archivo**: `lib/core/widgets/ui_state_handler.dart`
-- **Widgets implementados**:
-  - `UiStateHandler<T>`: Manejo declarativo de todos los estados
-  - `UiStateRefreshHandler<T>`: Con soporte para pull-to-refresh
-  - `UiStateConsumer<T>`: Integración con Riverpod providers
-  - `ErrorSnackbarHandler`: Muestra errores en snackbar automáticamente
-  - `LoadingOverlay`: Indicador de carga superpuesto
+1. `lib/app/di/injection_container.dart` - DI container completo y funcional, agregado `calendarLocalDataSourceProvider` a `taskRepositoryProvider`
+2. `lib/features/goals/data/datasources/goal_local_datasource.dart` - Soporte offline para tareas
+3. `lib/features/tasks/data/datasources/task_local_datasource.dart` - Nuevo método `getTasksForGoal()`
+4. `lib/core/database/app_database.dart` - Nuevo método `getTasksByGoalId()`
+5. `lib/features/tasks/presentation/state/task_provider.dart` - **Usar `refresh()` + trigger global de calendario**
+6. `lib/core/providers/sync_provider.dart` - Sincronización de estado fija
+7. `lib/features/calendar/data/datasources/calendar_remote_datasource.dart` - **Logging detallado para debugging de /next**
+8. `lib/features/calendar/presentation/pages/today_page.dart` - UI mejorada para próxima tarea
+9. `lib/features/calendar/data/repositories/calendar_repository_impl.dart` - Logging detallado
+10. `lib/features/tasks/data/repositories/task_repository_impl.dart` - **Sincronización de caché calendario al completar/saltar tarea**
+11. `lib/features/tasks/data/models/task_model.dart` - **Robustez contra campos null del backend**
+12. `lib/features/tasks/data/models/task_model.g.dart` - **FIX CRÍTICO: Usar safe converters en código generado**
+13. `lib/features/calendar/presentation/state/calendar_provider.dart` - **Trigger global + `ref.watch()` para reconstrucción automática**
 
-## 🏗️ Arquitectura Implementada
+---
+
+## 🔍 Debugging - Próxima Tarea en Online
+
+Si "Siguiente tarea" sigue sin mostrarse en online, revisar los logs de debug:
+
+1. Buscar en consola: `CalendarRemote: Raw response data: ...`
+2. Verificar si el servidor retorna datos válidos
+3. Si muestra `taskJson is null or not a Map`, el backend no está enviando la próxima tarea
+4. Si muestra `Error parsing next task:`, hay un problema de parsing - revisar el stack trace
+5. Verificar endpoint `/next` en el backend
+
+### Logs clave a buscar:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    PRESENTATION LAYER                        │
-│  ┌─────────────────┐  ┌─────────────────┐                  │
-│  │   UI Widgets    │  │  UiStateHandler   │                  │
-│  │  (Pages/Screens)│  │  (Error/Loading) │                  │
-│  └────────┬────────┘  └────────┬────────┘                  │
-│           │                    │                            │
-│  ┌────────▼────────────────────▼────────┐                   │
-│  │         BLoC (StateNotifier)        │                   │
-│  │    GoalsBloc / GoalDetailBloc        │                   │
-│  │         maneja UiState<T>            │                   │
-│  └────────┬─────────────────────────────┘                   │
-│           │                                                 │
-├───────────┼─────────────────────────────────────────────────┤
-│           │              DOMAIN LAYER                        │
-│  ┌────────▼────────┐  ┌─────────────────┐                  │
-│  │   Failure Types │  │  GoalRepository   │                  │
-│  │  (sealed class) │  │   (interface)    │                  │
-│  └─────────────────┘  └────────┬────────┘                  │
-│                              │                              │
-├──────────────────────────────┼──────────────────────────────┤
-│                              │         DATA LAYER           │
-│                     ┌────────▼────────┐                    │
-│                     │ GoalRepositoryImpl                   │
-│                     │  - Maneja AppException                 │
-│                     │  - Convierte a Failure                 │
-│                     └────────┬────────┘                    │
-│                              │                              │
-│                     ┌────────▼────────┐                    │
-│                     │ GoalRemoteDataSource                  │
-│                     │  - API calls con timeout                │
-│                     │  - Manejo de errores HTTP               │
-│                     └─────────────────┘                    │
-└─────────────────────────────────────────────────────────────┘
+CalendarRemote: Raw response data: {...}
+CalendarRemote: Response keys: [task, starts_in]
+CalendarRemote: taskJson type: _Map<String, dynamic>, value: {...}
+CalendarRemote: Parsing task with id: 5
+CalendarRemote: Task parsed successfully: Sesión 5: Eloquent ORM
+CalendarRemote: starts_in: 2 hours from now
 ```
 
-## 🎯 Beneficios de la Implementación
+## 🎯 Resumen de Soluciones Clave
 
-### 1. **UX Mejorada**
+### Problema: "Ocurrió un error" al completar tarea
 
-- ✅ La UI nunca se queda "pegada" en loading
-- ✅ Errores se muestran con mensajes amigables
-- ✅ Datos previos se preservan durante operaciones
-- ✅ Soporte para reintentos en errores recuperables
+**Causa**: Se invalidaba `calendarTasksProvider` (provider con familia) sin parámetros  
+**Solución**: Remover invalidación de provider con familia
 
-### 2. **Mantenibilidad**
+### Problema: Today/Calendar no se actualizan automáticamente
 
-- ✅ Patrón BLoC consistente en toda la app
-- ✅ Separación clara de responsabilidades
-- ✅ Código reutilizable con widgets genéricos
-- ✅ Fácil de extender para nuevas features
+**Causa raíz**: Dos problemas:
 
-### 3. **Escalabilidad**
+1. Dos cachés separados (TaskLocalDataSource vs CalendarLocalDataSource) no sincronizados
+2. `invalidate()` no funciona bien con `AsyncNotifier` - necesita `refresh()`
 
-- ✅ Arquitectura limpia lista para nuevos módulos
-- ✅ Sistema de estado genérico reutilizable
-- ✅ Manejo de errores estandarizado
-- ✅ Fácil agregar nuevos tipos de failure
+**Solución**:
 
-## 🔄 Próximos Pasos Recomendados
+- `TaskRepositoryImpl` actualiza AMBOS cachés al completar/saltar tarea
+- `task_provider.dart` usa `ref.read(todayProvider.notifier).refresh()` en lugar de `invalidate()`
+- `calendar_provider.dart` usa `ref.watch()` en `build()` para reconstrucción automática
 
-### Migrar otros features al nuevo sistema:
+### Problema: Próxima tarea no aparece en online
 
-- [ ] Tasks - Implementar TasksBloc con UiState
-- [ ] Auth - Implementar AuthBloc con manejo de errores
-- [ ] Calendar - Implementar CalendarBloc
+**Causa raíz**: Dos problemas:
 
-### Testing:
+1. **Backend retorna campos null**: El modelo espera `String` pero recibe `null`
+2. **Código generado no usaba safe converters**: `task_model.g.dart` usaba casts directos (`as String`)
 
-- [ ] Tests unitarios para GoalsBloc
-- [ ] Tests de widgets para UiStateHandler
-- [ ] Tests de integración para flujos completos
+**Error**: `type 'Null' is not a subtype of type 'String' in type cast` en `_$TaskModelFromJson`
 
-### Mejoras adicionales:
+**Solución**:
 
-- [ ] Implementar caché local (Hive/SQLite)
-- [ ] Agregar debounce en operaciones frecuentes
-- [ ] Implementar offline-first con cola de sincronización
+- `TaskModel` ahora usa safe converters: `_safeString()`, `_safeStringNullable()`
+- **`task_model.g.dart` actualizado** para usar los safe converters en lugar de casts directos
+- Todos los campos String manejan null gracefully
+- Valores por defecto para campos críticos (`scheduledAt = ''`, `status = 'scheduled'`)
+- `toEntity()` maneja strings vacíos sin crash
 
-## 📝 Notas Técnicas
+### Problema: Calendario no se actualiza al completar tarea
 
-- Usa **sealed classes** de Dart 3 (no requiere freezed)
-- **Riverpod** para inyección de dependencias y estado
-- **Pattern matching** con `switch` expressions para código limpio
-- **Optimistic updates** para mejor UX en operaciones CRUD
+**Causa raíz**: `calendarTasksProvider` es un provider con familia que se crea por rango de fechas. Cuando se completa una tarea desde otra página (ej: Today o Task Detail), las instancias del calendario no se enteran.
+
+**Solución**:
+
+- **Sistema de trigger global**: `calendarRefreshTriggerProvider` (StateProvider<int>)
+- **Función helper**: `refreshCalendar(Ref ref)` que incrementa el trigger
+- **Watch en notifier**: `CalendarTasksNotifier` hace `ref.watch(calendarRefreshTriggerProvider)`
+- Cuando se completa una tarea, se llama `refreshCalendar(ref)` y TODAS las instancias del calendario se reconstruyen automáticamente
