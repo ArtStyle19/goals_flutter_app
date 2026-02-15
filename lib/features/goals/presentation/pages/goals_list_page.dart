@@ -10,6 +10,7 @@ import 'package:productivity/core/widgets/last_sync_indicator.dart';
 import 'package:productivity/core/widgets/loading_widget.dart';
 import 'package:productivity/features/goals/presentation/state/goals_provider.dart';
 import 'package:productivity/features/goals/presentation/state/goals_sync_provider.dart';
+import 'package:productivity/features/goals/presentation/widgets/create_goal_modal.dart';
 import 'package:productivity/features/goals/presentation/widgets/goal_card.dart';
 
 /// Main dashboard page showing all goals.
@@ -62,7 +63,7 @@ class GoalsListPage extends ConsumerWidget {
                         'Crea tu primera meta y comienza a planificar tu aprendizaje.',
                     icon: Icons.flag_outlined,
                     actionLabel: 'Crear Meta',
-                    onAction: () => context.push(AppRoutes.createGoal),
+                    onAction: () => showCreateGoalModal(context),
                   ),
                 ],
               );
@@ -84,7 +85,7 @@ class GoalsListPage extends ConsumerWidget {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.createGoal),
+        onPressed: () => showCreateGoalModal(context),
         icon: const Icon(Icons.add),
         label: const Text('Nueva Meta'),
       ),
