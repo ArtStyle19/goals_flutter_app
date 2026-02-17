@@ -4,60 +4,92 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:productivity/core/widgets/custom_text_field.dart';
 import 'package:productivity/features/goals/presentation/state/goal_creation_provider.dart';
 
-/// Step 1: Goal title and description input.
-class GoalInfoStep extends ConsumerWidget {
+/// Step 1: Goal title and description.
+class GoalInfoStep extends ConsumerStatefulWidget {
   const GoalInfoStep({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GoalInfoStep> createState() => _GoalInfoStepState();
+}
+
+class _GoalInfoStepState extends ConsumerState<GoalInfoStep> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+
+  @override
+  void initState() {
+    super.initState();
+    final state = ref.read(goalCreationProvider);
+    _titleController = TextEditingController(text: state.title);
+    _descriptionController = TextEditingController(text: state.description);
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(goalCreationProvider);
     final notifier = ref.read(goalCreationProvider.notifier);
     final theme = Theme.of(context);
 
+    // Update controllers if state changed externally (e.g., when resetting)
+    if (_titleController.text != state.title) {
+      _titleController.text = state.title;
+      _titleController.selection = TextSelection.collapsed(
+        offset: state.title.length,
+      );
+    }
+    if (_descriptionController.text != state.description) {
+      _descriptionController.text = state.description;
+      _descriptionController.selection = TextSelection.collapsed(
+        offset: state.description.length,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
+        // Icon header
         _buildHeader(context, theme),
         const SizedBox(height: 24),
 
-        // Title input
+        // Title field
         CustomTextField(
-          controller: TextEditingController(text: state.title)
-            ..selection = TextSelection.collapsed(offset: state.title.length),
+          controller: _titleController,
           label: 'Título de la meta',
-          hint: 'Ej: Aprender React, Terminar proyecto...',
-          validator: (value) => state.errors['title'],
+          hint: 'Ej: Aprender Flutter',
           onChanged: notifier.setTitle,
           textInputAction: TextInputAction.next,
           prefixIcon: Icon(
             Icons.flag_outlined,
-            color: theme.colorScheme.primary,
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
         if (state.errors['title'] != null) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           _buildErrorText(context, state.errors['title']!, theme),
         ],
         const SizedBox(height: 20),
 
-        // Description input
+        // Description field
         CustomTextField(
-          controller: TextEditingController(text: state.description)
-            ..selection = TextSelection.collapsed(
-              offset: state.description.length,
-            ),
+          controller: _descriptionController,
           label: 'Descripción (opcional)',
-          hint: 'Describe brevemente qué quieres lograr...',
-          maxLines: 3,
+          hint: 'Describe los detalles de tu meta...',
           onChanged: notifier.setDescription,
+          maxLines: 3,
           textInputAction: TextInputAction.done,
           prefixIcon: Icon(
             Icons.description_outlined,
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
 
         // Helper text
         _buildHelperCard(context, theme),
@@ -66,8 +98,7 @@ class GoalInfoStep extends ConsumerWidget {
   }
 
   Widget _buildHeader(BuildContext context, ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(12),
@@ -76,23 +107,30 @@ class GoalInfoStep extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
-            Icons.lightbulb_outline,
+            Icons.edit_note,
             color: theme.colorScheme.onPrimaryContainer,
-            size: 28,
+            size: 24,
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          '¿Qué meta quieres alcanzar?',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Define un título claro y opcionalmente una descripción para tu meta.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Qué quieres lograr?',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Define tu meta de forma clara y específica',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -122,20 +160,20 @@ class GoalInfoStep extends ConsumerWidget {
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
         children: [
           Icon(
-            Icons.tips_and_updates_outlined,
-            color: theme.colorScheme.tertiary,
+            Icons.lightbulb_outlined,
+            color: theme.colorScheme.onSurfaceVariant,
             size: 20,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Tip: Un buen título es específico y medible. Ej: "Completar curso de Flutter" en lugar de "Aprender Flutter".',
+              'Un buen título te ayuda a mantener el enfoque. Sé específico pero conciso.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),

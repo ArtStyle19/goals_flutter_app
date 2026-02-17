@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/features/goals/presentation/state/goal_creation_provider.dart';
 
-/// Step 2: Goal deadline selection.
+/// Step 2: Deadline selection with calendar picker.
 class GoalDeadlineStep extends ConsumerWidget {
   const GoalDeadlineStep({super.key});
 
@@ -17,32 +17,28 @@ class GoalDeadlineStep extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
+        // Icon header
         _buildHeader(context, theme),
         const SizedBox(height: 24),
 
         // Date picker card
         _buildDatePickerCard(context, state, notifier, theme),
+        const SizedBox(height: 16),
+
+        // Quick date options
+        _buildQuickOptions(context, state, notifier, theme),
+
+        // Error message
         if (state.errors['deadline'] != null) ...[
           const SizedBox(height: 12),
           _buildErrorText(context, state.errors['deadline']!, theme),
         ],
-        const SizedBox(height: 24),
-
-        // Quick select buttons
-        _buildQuickSelectButtons(context, notifier, theme),
-        const SizedBox(height: 24),
-
-        // Info card
-        if (state.deadline != null)
-          _buildDeadlineInfoCard(context, state.deadline!, theme),
       ],
     );
   }
 
   Widget _buildHeader(BuildContext context, ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(12),
@@ -51,23 +47,30 @@ class GoalDeadlineStep extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
-            Icons.calendar_today_outlined,
+            Icons.event,
             color: theme.colorScheme.onSecondaryContainer,
-            size: 28,
+            size: 24,
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          '¿Cuándo quieres completarla?',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Selecciona una fecha límite realista para tu meta.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Cuándo quieres terminar?',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Establece una fecha límite realista',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -83,19 +86,21 @@ class GoalDeadlineStep extends ConsumerWidget {
     final isSelected = state.deadline != null;
 
     return InkWell(
-      onTap: () => _showDatePicker(context, notifier),
+      onTap: () => _pickDate(context, state, notifier),
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: isSelected
               ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
-              : theme.colorScheme.surface,
+              : theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.5,
+                ),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
+                ? theme.colorScheme.primary.withValues(alpha: 0.3)
+                : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -105,16 +110,16 @@ class GoalDeadlineStep extends ConsumerWidget {
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? theme.colorScheme.primary.withValues(alpha: 0.1)
-                    : theme.colorScheme.surfaceContainerHighest,
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
-                isSelected ? Icons.event_available : Icons.event_outlined,
+                Icons.calendar_today,
                 color: isSelected
-                    ? theme.colorScheme.primary
+                    ? theme.colorScheme.onPrimary
                     : theme.colorScheme.onSurfaceVariant,
-                size: 28,
+                size: 24,
               ),
             ),
             const SizedBox(width: 16),
@@ -124,17 +129,15 @@ class GoalDeadlineStep extends ConsumerWidget {
                 children: [
                   Text(
                     isSelected ? 'Fecha seleccionada' : 'Seleccionar fecha',
-                    style: theme.textTheme.labelLarge?.copyWith(
-                      color: isSelected
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurfaceVariant,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     isSelected
                         ? AppDateUtils.formatFull(state.deadline!)
-                        : 'Toca para abrir el calendario',
+                        : 'Toca para elegir',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       color: isSelected
@@ -145,36 +148,34 @@ class GoalDeadlineStep extends ConsumerWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right,
-              color: isSelected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurfaceVariant,
-            ),
+            if (isSelected)
+              Icon(Icons.check_circle, color: theme.colorScheme.primary),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildQuickSelectButtons(
+  Widget _buildQuickOptions(
     BuildContext context,
+    GoalCreationState state,
     GoalCreationNotifier notifier,
     ThemeData theme,
   ) {
+    final now = DateTime.now();
     final options = [
-      (label: '1 semana', days: 7),
-      (label: '2 semanas', days: 14),
-      (label: '1 mes', days: 30),
-      (label: '3 meses', days: 90),
+      ('1 semana', now.add(const Duration(days: 7))),
+      ('2 semanas', now.add(const Duration(days: 14))),
+      ('1 mes', now.add(const Duration(days: 30))),
+      ('3 meses', now.add(const Duration(days: 90))),
     ];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Selección rápida',
-          style: theme.textTheme.titleSmall?.copyWith(
+          'Opciones rápidas',
+          style: theme.textTheme.labelLarge?.copyWith(
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -183,90 +184,29 @@ class GoalDeadlineStep extends ConsumerWidget {
           spacing: 8,
           runSpacing: 8,
           children: options.map((option) {
-            return ActionChip(
-              avatar: Icon(
-                Icons.flash_on,
-                size: 18,
-                color: theme.colorScheme.onSecondaryContainer,
+            final label = option.$1;
+            final date = option.$2;
+            final isSelected =
+                state.deadline != null &&
+                state.deadline!.year == date.year &&
+                state.deadline!.month == date.month &&
+                state.deadline!.day == date.day;
+
+            return ChoiceChip(
+              label: Text(label),
+              selected: isSelected,
+              onSelected: (_) => notifier.setDeadline(date),
+              selectedColor: theme.colorScheme.primaryContainer,
+              labelStyle: TextStyle(
+                color: isSelected
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.onSurface,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
-              label: Text(option.label),
-              onPressed: () {
-                final date = DateTime.now().add(Duration(days: option.days));
-                notifier.setDeadline(date);
-              },
-              backgroundColor: theme.colorScheme.secondaryContainer,
-              side: BorderSide.none,
             );
           }).toList(),
         ),
       ],
-    );
-  }
-
-  Widget _buildDeadlineInfoCard(
-    BuildContext context,
-    DateTime deadline,
-    ThemeData theme,
-  ) {
-    final daysUntil = AppDateUtils.daysUntil(deadline);
-    final isShort = daysUntil <= 7;
-    final isLong = daysUntil >= 90;
-
-    final (icon, title, description, color) = switch ((isShort, isLong)) {
-      (true, _) => (
-        Icons.timer,
-        'Plazo corto',
-        'Asegúrate de tener suficiente tiempo disponible.',
-        theme.colorScheme.tertiary,
-      ),
-      (_, true) => (
-        Icons.calendar_month,
-        'Plazo amplio',
-        'Perfecto para metas complejas que requieren más tiempo.',
-        theme.colorScheme.primary,
-      ),
-      _ => (
-        Icons.schedule,
-        'Plazo moderado',
-        'Buen balance para la mayoría de metas.',
-        theme.colorScheme.secondary,
-      ),
-    };
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '$daysUntil días desde hoy',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  description,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -286,16 +226,31 @@ class GoalDeadlineStep extends ConsumerWidget {
     );
   }
 
-  Future<void> _showDatePicker(
+  Future<void> _pickDate(
     BuildContext context,
+    GoalCreationState state,
     GoalCreationNotifier notifier,
   ) async {
     final now = DateTime.now();
+    final initialDate = state.deadline ?? now.add(const Duration(days: 7));
+    final firstDate = now;
+    final lastDate = now.add(const Duration(days: 365 * 2));
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: now.add(const Duration(days: 30)),
-      firstDate: now.add(const Duration(days: 1)),
-      lastDate: now.add(const Duration(days: 365)),
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: Theme.of(context).colorScheme.primary,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {

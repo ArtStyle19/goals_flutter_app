@@ -25,6 +25,7 @@ Future<void> showCreateGoalModal(BuildContext context) async {
 }
 
 /// Main modal widget for creating a new goal.
+/// Designed to match the app's card-based design system.
 class CreateGoalModal extends ConsumerStatefulWidget {
   const CreateGoalModal({super.key});
 
@@ -32,38 +33,19 @@ class CreateGoalModal extends ConsumerStatefulWidget {
   ConsumerState<CreateGoalModal> createState() => _CreateGoalModalState();
 }
 
-class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
-    with TickerProviderStateMixin {
-  late final AnimationController _slideController;
-  late final AnimationController _fadeController;
+class _CreateGoalModalState extends ConsumerState<CreateGoalModal> {
   late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
-
     // Reset state when modal opens
     ref.read(goalCreationProvider.notifier).reset();
-
-    _slideController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fadeController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
     _pageController = PageController();
-
-    // Start entrance animation
-    _slideController.forward();
-    _fadeController.forward();
   }
 
   @override
   void dispose() {
-    _slideController.dispose();
-    _fadeController.dispose();
     _pageController.dispose();
     super.dispose();
   }
@@ -73,92 +55,58 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
     final state = ref.watch(goalCreationProvider);
     final notifier = ref.read(goalCreationProvider.notifier);
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final screenSize = MediaQuery.of(context).size;
 
-    return AnimatedBuilder(
-      animation: _slideController,
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(
-            0,
-            (1 - _slideController.value) *
-                MediaQuery.of(context).size.height *
-                0.1,
-          ),
-          child: child,
-        );
-      },
-      child: FadeTransition(
-        opacity: _fadeController,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.85,
-            maxWidth: 600,
-          ),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Handle bar
-                _buildHandleBar(context),
-
-                // Header with progress
-                _buildHeader(context, state),
-
-                // Progress indicator
-                _buildProgressIndicator(context, state),
-
-                const SizedBox(height: 8),
-
-                // Content area with page view
-                Flexible(
-                  child: PageView(
-                    controller: _pageController,
-                    physics: const NeverScrollableScrollPhysics(),
-                    onPageChanged: (index) => notifier.goToStep(index),
-                    children: const [
-                      _StepWrapper(child: GoalInfoStep()),
-                      _StepWrapper(child: GoalDeadlineStep()),
-                      _StepWrapper(child: GoalDurationStep()),
-                      _StepWrapper(child: GoalAvailabilityStep()),
-                      _StepWrapper(child: GoalPreviewStep()),
-                    ],
-                  ),
-                ),
-
-                // Bottom action bar
-                _buildBottomBar(context, state, notifier),
-              ],
-            ),
-          ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      constraints: BoxConstraints(
+        maxHeight: screenSize.height * 0.85,
+        maxWidth: 600,
+        minWidth: 0,
+      ),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color:
+              theme.dividerTheme.color ??
+              colorScheme.outlineVariant.withValues(alpha: 0.5),
         ),
       ),
-    );
-  }
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header
+            _buildHeader(context, state),
 
-  Widget _buildHandleBar(BuildContext context) {
-    final theme = Theme.of(context);
+            // Progress indicator
+            _buildStepIndicator(context, state),
 
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.only(top: 12, bottom: 8),
-        width: 40,
-        height: 4,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.3),
-          borderRadius: BorderRadius.circular(2),
+            // Divider
+            Divider(height: 1, color: theme.dividerTheme.color),
+
+            // Content - takes available space
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                physics: const NeverScrollableScrollPhysics(),
+                onPageChanged: (index) => notifier.goToStep(index),
+                children: const [
+                  _StepWrapper(child: GoalInfoStep()),
+                  _StepWrapper(child: GoalDeadlineStep()),
+                  _StepWrapper(child: GoalDurationStep()),
+                  _StepWrapper(child: GoalAvailabilityStep()),
+                  _StepWrapper(child: GoalPreviewStep()),
+                ],
+              ),
+            ),
+
+            // Bottom bar - always at the bottom
+            _buildBottomBar(context, state, notifier),
+          ],
         ),
       ),
     );
@@ -166,79 +114,92 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
 
   Widget _buildHeader(BuildContext context, GoalCreationState state) {
     final theme = Theme.of(context);
+    final isFirstStep = state.currentStep == 0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       child: Row(
         children: [
-          // Close button
+          // Close/Back button
           IconButton(
             onPressed: () => _closeModal(),
-            icon: const Icon(Icons.close),
-            tooltip: 'Cerrar',
-          ),
-
-          const Spacer(),
-
-          // Title
-          Text(
-            'Nueva Meta',
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w600,
+            icon: Icon(isFirstStep ? Icons.close : Icons.arrow_back, size: 20),
+            tooltip: isFirstStep ? 'Cerrar' : 'Atrás',
+            style: IconButton.styleFrom(
+              backgroundColor: theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              padding: const EdgeInsets.all(8),
             ),
           ),
 
-          const Spacer(),
+          const SizedBox(width: 12),
 
-          // Step counter
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              '${state.currentStep + 1}/${state.totalSteps}',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onPrimaryContainer,
-                fontWeight: FontWeight.w600,
-              ),
+          // Title - left aligned like app bars
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Nueva Meta',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'Paso ${state.currentStep + 1} de ${state.totalSteps}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
+
+          // Step dots indicator
+          _buildStepDots(context, state),
         ],
       ),
     );
   }
 
-  Widget _buildProgressIndicator(
-    BuildContext context,
-    GoalCreationState state,
-  ) {
+  Widget _buildStepDots(BuildContext context, GoalCreationState state) {
+    final theme = Theme.of(context);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(state.totalSteps, (index) {
+        final isCompleted = index < state.currentStep;
+        final isCurrent = index == state.currentStep;
+
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: isCurrent ? 20 : 6,
+          height: 6,
+          margin: const EdgeInsets.only(left: 4),
+          decoration: BoxDecoration(
+            color: isCompleted || isCurrent
+                ? theme.colorScheme.primary
+                : theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        );
+      }),
+    );
+  }
+
+  Widget _buildStepIndicator(BuildContext context, GoalCreationState state) {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Row(
-        children: List.generate(state.totalSteps, (index) {
-          final isCompleted = index < state.currentStep;
-          final isCurrent = index == state.currentStep;
-
-          return Expanded(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              height: 4,
-              margin: EdgeInsets.only(
-                right: index < state.totalSteps - 1 ? 8 : 0,
-              ),
-              decoration: BoxDecoration(
-                color: isCompleted || isCurrent
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          );
-        }),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: LinearProgressIndicator(
+          value: state.progress,
+          minHeight: 4,
+          backgroundColor: theme.colorScheme.surfaceContainerHighest,
+          valueColor: AlwaysStoppedAnimation(theme.colorScheme.primary),
+        ),
       ),
     );
   }
@@ -254,52 +215,49 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
     final isFirstStep = state.currentStep == 0;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            color:
+                theme.dividerTheme.color ??
+                theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
           ),
         ),
       ),
       child: SafeArea(
         top: false,
         child: Row(
+          mainAxisSize: MainAxisSize.max,
           children: [
-            // Left button: Cancel (step 1) or Atrás (steps 2-5)
-            Expanded(
-              flex: 1,
+            // Left button: Cancel on first step, Back on other steps
+            SizedBox(
+              width: 100,
               child: isFirstStep
                   ? TextButton(
                       onPressed: () => _closeModal(),
                       child: const Text('Cancelar'),
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
-                      ),
                     )
                   : OutlinedButton.icon(
                       onPressed: () => _goToPreviousStep(notifier),
                       icon: const Icon(Icons.arrow_back, size: 18),
                       label: const Text('Atrás'),
                       style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(52),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 12,
+                        ),
                       ),
                     ),
             ),
 
-            const SizedBox(width: 12),
+            const Spacer(),
 
-            // Continue/Create button
-            Expanded(
-              flex: 2,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                child: isLastStep
-                    ? _buildCreateButton(context, state, notifier)
-                    : _buildContinueButton(context, canProceed, notifier),
-              ),
-            ),
+            // Continue/Create button - right aligned
+            isLastStep
+                ? _buildCreateButton(context, state, notifier)
+                : _buildContinueButton(context, canProceed, notifier),
           ],
         ),
       ),
@@ -313,9 +271,13 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
   ) {
     return FilledButton.icon(
       onPressed: canProceed ? () => _goToNextStep(notifier) : null,
-      icon: const Icon(Icons.arrow_forward),
+      icon: const Icon(Icons.arrow_forward, size: 18),
       label: const Text('Continuar'),
-      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        minimumSize: const Size(140, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
   }
 
@@ -332,17 +294,19 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
           : () => _submitGoal(context, notifier),
       icon: state.isSubmitting
           ? SizedBox(
-              width: 20,
-              height: 20,
+              width: 18,
+              height: 18,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 color: theme.colorScheme.onPrimary,
               ),
             )
-          : const Icon(Icons.check),
+          : const Icon(Icons.check, size: 18),
       label: Text(state.isSubmitting ? 'Creando...' : 'Crear Meta'),
       style: FilledButton.styleFrom(
-        minimumSize: const Size.fromHeight(52),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        minimumSize: const Size(160, 44),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         backgroundColor: theme.colorScheme.primary,
       ),
     );
@@ -367,14 +331,11 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
   }
 
   void _closeModal() {
-    _slideController.reverse();
-    _fadeController.reverse().then((_) {
-      if (mounted) {
-        context.pop();
-        // Reset state after closing
-        ref.read(goalCreationProvider.notifier).reset();
-      }
-    });
+    // Reset state before closing to avoid null check errors
+    ref.read(goalCreationProvider.notifier).reset();
+    if (mounted) {
+      context.pop();
+    }
   }
 
   Future<void> _submitGoal(
@@ -398,22 +359,30 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
           );
 
       if (mounted) {
-        _closeModal();
+        // Close modal first, then show success message
+        context.pop();
 
-        // Show success message
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('¡Meta creada exitosamente!'),
-              ],
-            ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        // Show success message after modal is closed
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.white),
+                    SizedBox(width: 12),
+                    Text('¡Meta creada exitosamente!'),
+                  ],
+                ),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+          }
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -422,6 +391,9 @@ class _CreateGoalModalState extends ConsumerState<CreateGoalModal>
             content: Text(userFriendlyMessage(e)),
             backgroundColor: Theme.of(context).colorScheme.error,
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -442,7 +414,7 @@ class _StepWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       child: child,
     );
   }

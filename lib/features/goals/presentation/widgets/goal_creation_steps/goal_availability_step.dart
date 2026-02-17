@@ -5,7 +5,6 @@ import 'package:productivity/core/constants/app_constants.dart';
 import 'package:productivity/features/goals/presentation/state/goal_creation_provider.dart';
 
 /// Step 4: Availability selection with single-line day selector.
-/// Shows one day at a time for editing.
 class GoalAvailabilityStep extends ConsumerWidget {
   const GoalAvailabilityStep({super.key});
 
@@ -15,36 +14,38 @@ class GoalAvailabilityStep extends ConsumerWidget {
     final notifier = ref.read(goalCreationProvider.notifier);
     final theme = Theme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Header
-        _buildHeader(context, theme, state.sessionDuration),
-        const SizedBox(height: 20),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Icon header
+          _buildHeader(context, theme, state.sessionDuration),
+          const SizedBox(height: 24),
 
-        // Day selector - single line
-        _buildDaySelector(context, state, notifier, theme),
-        const SizedBox(height: 20),
+          // Day selector - centered with proper constraints
+          _buildDaySelector(context, state, notifier, theme),
+          const SizedBox(height: 20),
 
-        // Selected day editor or empty state
-        if (state.selectedDay != null)
-          _buildDayEditor(context, state, notifier, theme)
-        else if (state.availability.isNotEmpty)
-          _buildDaySelectionPrompt(context, theme)
-        else
-          _buildEmptyState(context, theme),
+          // Selected day editor or empty state
+          if (state.selectedDay != null)
+            _buildDayEditor(context, state, notifier, theme)
+          else if (state.availability.isNotEmpty)
+            _buildDaySelectionPrompt(context, theme)
+          else
+            _buildEmptyState(context, theme),
 
-        // Error message
-        if (state.errors['availability'] != null) ...[
-          const SizedBox(height: 12),
-          _buildErrorText(context, state.errors['availability']!, theme),
+          // Error message
+          if (state.errors['availability'] != null) ...[
+            const SizedBox(height: 12),
+            _buildErrorText(context, state.errors['availability']!, theme),
+          ],
+
+          // Summary
+          if (state.availability.isNotEmpty && state.selectedDay == null)
+            _buildSummary(context, state, theme),
         ],
-
-        // Summary
-        if (state.availability.isNotEmpty && state.selectedDay == null)
-          _buildSummary(context, state, theme),
-      ],
+      ),
     );
   }
 
@@ -56,18 +57,18 @@ class GoalAvailabilityStep extends ConsumerWidget {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: theme.colorScheme.tertiaryContainer,
+            color: theme.colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             Icons.access_time,
-            color: theme.colorScheme.onTertiaryContainer,
+            color: theme.colorScheme.onPrimaryContainer,
             size: 24,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,7 +79,7 @@ class GoalAvailabilityStep extends ConsumerWidget {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
                 'Sesiones de ${sessionDuration}min',
                 style: theme.textTheme.bodySmall?.copyWith(
@@ -102,19 +103,19 @@ class GoalAvailabilityStep extends ConsumerWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: AppConstants.weekDays.map((day) {
             final hasSlots =
                 state.availability.containsKey(day) &&
                 (state.availability[day]?.isNotEmpty ?? false);
             final isSelected = state.selectedDay == day;
             final dayLabel = AppConstants.dayShortLabels[day]!;
-            final fullLabel = AppConstants.dayLabels[day]!;
 
             return Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
+              child: InkWell(
                 onTap: () => notifier.toggleDay(day),
+                borderRadius: BorderRadius.circular(12),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 44,
@@ -237,19 +238,18 @@ class GoalAvailabilityStep extends ConsumerWidget {
                     ),
                   ),
                 const SizedBox(width: 8),
-                // Remove day button
                 IconButton(
                   onPressed: () => notifier.removeDay(day),
                   icon: Icon(
                     Icons.delete_outline,
                     color: theme.colorScheme.error,
-                    size: 22,
+                    size: 20,
                   ),
                   tooltip: 'Eliminar día',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
+                    minWidth: 32,
+                    minHeight: 32,
                   ),
                 ),
               ],
@@ -289,7 +289,6 @@ class GoalAvailabilityStep extends ConsumerWidget {
               }),
               const SizedBox(height: 8),
             ] else ...[
-              // Empty state - no time slots yet
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -328,7 +327,7 @@ class GoalAvailabilityStep extends ConsumerWidget {
             // Add time range button
             TextButton.icon(
               onPressed: () => _addNewSlot(context, day, slots, notifier),
-              icon: const Icon(Icons.add_circle_outline, size: 20),
+              icon: const Icon(Icons.add_circle_outline, size: 18),
               label: Text(
                 hasSlots ? 'Agregar otro horario' : 'Agregar horario',
               ),
@@ -357,7 +356,7 @@ class GoalAvailabilityStep extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.touch_app, color: theme.colorScheme.primary, size: 28),
+          Icon(Icons.touch_app, color: theme.colorScheme.primary, size: 24),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -365,13 +364,13 @@ class GoalAvailabilityStep extends ConsumerWidget {
               children: [
                 Text(
                   'Toca un día para editar',
-                  style: theme.textTheme.titleSmall?.copyWith(
+                  style: theme.textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Los días en color ya tienen horarios. Tócalos para ver o modificar.',
+                  'Los días en color ya tienen horarios',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
@@ -385,55 +384,103 @@ class GoalAvailabilityStep extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+    return Center(
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surfaceContainerHighest.withValues(
+            alpha: 0.5,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            Icons.touch_app_outlined,
-            size: 48,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Selecciona los días',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer.withValues(
+                  alpha: 0.5,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.calendar_today_outlined,
+                size: 40,
+                color: theme.colorScheme.primary,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Toca las letras de los días donde puedas trabajar en tu meta',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            const SizedBox(height: 20),
+            Text(
+              'Selecciona los días',
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface,
+              ),
+              textAlign: TextAlign.center,
             ),
-            textAlign: TextAlign.center,
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'Toca las letras de los días donde puedas trabajar en tu meta',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.touch_app,
+                    size: 16,
+                    color: theme.colorScheme.onPrimaryContainer,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Empieza tocando un día',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildErrorText(BuildContext context, String error, ThemeData theme) {
-    return Row(
-      children: [
-        Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
-        const SizedBox(width: 6),
-        Text(
-          error,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.error,
-            fontWeight: FontWeight.w500,
+    return Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, color: theme.colorScheme.error, size: 16),
+          const SizedBox(width: 6),
+          Text(
+            error,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -442,12 +489,14 @@ class GoalAvailabilityStep extends ConsumerWidget {
     GoalCreationState state,
     ThemeData theme,
   ) {
-    // Calculate total available minutes
     int totalMinutes = 0;
     int daysWithSlots = 0;
+    int totalTimeSlots = 0;
+
     state.availability.forEach((day, slots) {
       if (slots.isNotEmpty) {
         daysWithSlots++;
+        totalTimeSlots += slots.length;
         for (final slot in slots) {
           final startParts = slot.start.split(':');
           final endParts = slot.end.split(':');
@@ -460,21 +509,26 @@ class GoalAvailabilityStep extends ConsumerWidget {
       }
     });
 
-    final sessionDuration = state.sessionDuration;
-    final estimatedSessions = totalMinutes ~/ sessionDuration;
+    final estimatedSessions = totalMinutes ~/ state.sessionDuration;
 
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.5),
+        color: totalTimeSlots > 0
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
+            : theme.colorScheme.errorContainer.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
           Icon(
-            Icons.calculate_outlined,
-            color: theme.colorScheme.onPrimaryContainer,
+            totalTimeSlots > 0
+                ? Icons.check_circle_outline
+                : Icons.warning_amber,
+            color: totalTimeSlots > 0
+                ? theme.colorScheme.onPrimaryContainer
+                : theme.colorScheme.onErrorContainer,
             size: 24,
           ),
           const SizedBox(width: 12),
@@ -483,21 +537,35 @@ class GoalAvailabilityStep extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$estimatedSessions sesiones posibles',
+                  totalTimeSlots > 0
+                      ? '$estimatedSessions sesiones posibles'
+                      : 'Agrega al menos un horario',
                   style: theme.textTheme.labelLarge?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer,
+                    color: totalTimeSlots > 0
+                        ? theme.colorScheme.onPrimaryContainer
+                        : theme.colorScheme.onErrorContainer,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  'En $daysWithSlots días con ${totalMinutes ~/ 60}h ${totalMinutes % 60}min totales',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onPrimaryContainer.withValues(
-                      alpha: 0.8,
+                if (totalTimeSlots > 0)
+                  Text(
+                    'En $daysWithSlots días con ${totalMinutes ~/ 60}h ${totalMinutes % 60}min',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer.withValues(
+                        alpha: 0.8,
+                      ),
+                    ),
+                  )
+                else
+                  Text(
+                    'Debes agregar horarios para poder continuar',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onErrorContainer.withValues(
+                        alpha: 0.8,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -512,17 +580,13 @@ class GoalAvailabilityStep extends ConsumerWidget {
     List<({String start, String end})> currentSlots,
     GoalCreationNotifier notifier,
   ) async {
-    // Find a time that doesn't overlap
     String suggestedStart = '09:00';
     String suggestedEnd = '12:00';
 
-    // Try to find a gap or use default
     if (currentSlots.isNotEmpty) {
-      // Sort slots by start time
       final sorted = List<({String start, String end})>.from(currentSlots)
         ..sort((a, b) => a.start.compareTo(b.start));
 
-      // Try after the last slot
       final lastSlot = sorted.last;
       final lastEndHour = int.parse(lastSlot.end.split(':')[0]);
       if (lastEndHour < 20) {
@@ -537,7 +601,6 @@ class GoalAvailabilityStep extends ConsumerWidget {
   }
 }
 
-/// Row showing a single time range with start/end pickers.
 class _TimeRangeRow extends StatelessWidget {
   final ({String start, String end}) slot;
   final ValueChanged<String> onStartChanged;
@@ -559,7 +622,6 @@ class _TimeRangeRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          // Start time
           Expanded(
             child: _TimeButton(
               time: slot.start,
@@ -576,7 +638,6 @@ class _TimeRangeRow extends StatelessWidget {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          // End time
           Expanded(
             child: _TimeButton(
               time: slot.end,
@@ -585,7 +646,6 @@ class _TimeRangeRow extends StatelessWidget {
               theme: theme,
             ),
           ),
-          // Delete button
           IconButton(
             onPressed: onDelete,
             icon: Icon(
@@ -594,6 +654,8 @@ class _TimeRangeRow extends StatelessWidget {
               size: 20,
             ),
             tooltip: 'Eliminar horario',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
       ),
@@ -634,7 +696,6 @@ class _TimeRangeRow extends StatelessWidget {
   }
 }
 
-/// Button showing a time value.
 class _TimeButton extends StatelessWidget {
   final String time;
   final String label;

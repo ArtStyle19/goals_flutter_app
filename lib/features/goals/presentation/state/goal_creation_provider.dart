@@ -58,13 +58,30 @@ class GoalCreationState {
     );
   }
 
+  /// Check if there's at least one time slot across all days
+  bool get hasTimeSlots {
+    if (availability.isEmpty) return false;
+    for (final slots in availability.values) {
+      if (slots.isNotEmpty) return true;
+    }
+    return false;
+  }
+
+  /// Get total number of time slots across all days
+  int get totalTimeSlots {
+    int count = 0;
+    for (final slots in availability.values) {
+      count += slots.length;
+    }
+    return count;
+  }
+
   bool get canProceedToNext {
     return switch (currentStep) {
       0 => title.trim().isNotEmpty && title.trim().length >= 3,
       1 => deadline != null,
       2 => true, // Duration always has a value
-      3 =>
-        availability.isNotEmpty, // Must have at least one day with time slots
+      3 => hasTimeSlots, // Must have at least one actual time slot
       4 => true, // Preview step always valid
       _ => false,
     };
@@ -158,7 +175,10 @@ class GoalCreationNotifier extends StateNotifier<GoalCreationState> {
   }
 
   void setAvailability(Map<String, List<({String start, String end})>> value) {
-    final error = value.isEmpty ? 'Selecciona al menos un día' : null;
+    final hasSlots = value.values.any((slots) => slots.isNotEmpty);
+    final error = !hasSlots
+        ? 'Selecciona al menos un día y agrega un horario'
+        : null;
     state = state.copyWith(
       availability: value,
       errors: {...state.errors, 'availability': error},
@@ -208,12 +228,17 @@ class GoalCreationNotifier extends StateNotifier<GoalCreationState> {
     // If this was the selected day, deselect it
     final newSelectedDay = state.selectedDay == day ? null : state.selectedDay;
 
+    // Check if we still have any time slots
+    final hasSlots = updated.values.any((slots) => slots.isNotEmpty);
+
     state = state.copyWith(
       availability: updated,
       selectedDay: newSelectedDay,
       errors: {
         ...state.errors,
-        'availability': updated.isEmpty ? 'Selecciona al menos un día' : null,
+        'availability': !hasSlots
+            ? 'Selecciona al menos un día y agrega un horario'
+            : null,
       },
     );
   }
@@ -227,7 +252,19 @@ class GoalCreationNotifier extends StateNotifier<GoalCreationState> {
     } else {
       updated[day] = slots;
     }
-    state = state.copyWith(availability: updated);
+
+    // Check if we have at least one time slot
+    final hasSlots = updated.values.any((s) => s.isNotEmpty);
+
+    state = state.copyWith(
+      availability: updated,
+      errors: {
+        ...state.errors,
+        'availability': !hasSlots
+            ? 'Selecciona al menos un día y agrega un horario'
+            : null,
+      },
+    );
   }
 
   void setSubmitting(bool value) {
@@ -260,11 +297,13 @@ class GoalCreationNotifier extends StateNotifier<GoalCreationState> {
         }
         return true;
       case 3:
-        if (state.availability.isEmpty) {
+        // Validate that at least one time slot exists
+        if (!state.hasTimeSlots) {
           state = state.copyWith(
             errors: {
               ...state.errors,
-              'availability': 'Selecciona al menos un día y agrega un horario',
+              'availability':
+                  'Debes agregar al menos un horario para continuar',
             },
           );
           return false;

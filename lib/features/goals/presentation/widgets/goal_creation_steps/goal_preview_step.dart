@@ -11,27 +11,31 @@ class GoalPreviewStep extends ConsumerWidget {
 
   static const int _startHour = 6; // 6 AM
   static const int _endHour = 22; // 10 PM
-  static const double _hourHeight = 50; // Height per hour in the grid
+  static const double _hourHeight = 48;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(goalCreationProvider);
     final theme = Theme.of(context);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Header with deadline
-        _buildHeader(context, state, theme),
-        const SizedBox(height: 16),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Icon header
+          _buildHeader(context, state, theme),
+          const SizedBox(height: 20),
 
-        // Visual weekly calendar
-        Flexible(child: _buildVisualCalendar(context, state, theme)),
+          // Visual weekly calendar - fixed height to avoid layout issues
+          SizedBox(
+            height: 280,
+            child: _buildVisualCalendar(context, state, theme),
+          ),
 
-        // Summary
-        _buildSummary(context, state, theme),
-      ],
+          // Summary card
+          _buildSummary(context, state, theme),
+        ],
+      ),
     );
   }
 
@@ -43,31 +47,31 @@ class GoalPreviewStep extends ConsumerWidget {
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: theme.colorScheme.primaryContainer,
+            color: theme.colorScheme.tertiaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
             Icons.calendar_view_week,
-            color: theme.colorScheme.onPrimaryContainer,
+            color: theme.colorScheme.onTertiaryContainer,
             size: 24,
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Vista previa del horario',
+                'Vista previa',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
-                'Meta: ${state.title}',
+                state.title,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -80,13 +84,15 @@ class GoalPreviewStep extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: theme.colorScheme.tertiaryContainer,
+            color: theme.colorScheme.primaryContainer,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
-            AppDateUtils.formatShort(state.deadline!),
+            state.deadline != null
+                ? AppDateUtils.formatShort(state.deadline!)
+                : 'Sin fecha',
             style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onTertiaryContainer,
+              color: theme.colorScheme.onPrimaryContainer,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -115,20 +121,34 @@ class GoalPreviewStep extends ConsumerWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
           children: [
             // Day headers
             _buildDayHeaders(theme),
 
-            // Scrollable calendar grid
-            Flexible(
+            // Divider
+            Divider(
+              height: 1,
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+            ),
+
+            // Scrollable calendar grid - takes remaining space
+            Expanded(
               child: SingleChildScrollView(
                 child: SizedBox(
                   height: gridHeight,
                   child: Row(
                     children: [
-                      // Time column (hours)
+                      // Time column
                       _buildTimeColumn(theme),
+
+                      // Vertical divider
+                      VerticalDivider(
+                        width: 1,
+                        color: theme.colorScheme.outlineVariant.withValues(
+                          alpha: 0.5,
+                        ),
+                      ),
 
                       // Days columns
                       ...AppConstants.weekDays.map((day) {
@@ -157,17 +177,10 @@ class GoalPreviewStep extends ConsumerWidget {
 
   Widget _buildDayHeaders(ThemeData theme) {
     return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-          ),
-        ),
-      ),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
       child: Row(
         children: [
-          // Empty corner cell
+          // Time header
           SizedBox(
             width: 50,
             child: Center(
@@ -180,21 +193,19 @@ class GoalPreviewStep extends ConsumerWidget {
               ),
             ),
           ),
+
+          // Vertical divider
+          VerticalDivider(
+            width: 1,
+            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          ),
+
           // Day headers
           ...AppConstants.weekDays.map((day) {
             final shortLabel = AppConstants.dayShortLabels[day]!;
             return Expanded(
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border(
-                    left: BorderSide(
-                      color: theme.colorScheme.outlineVariant.withValues(
-                        alpha: 0.3,
-                      ),
-                    ),
-                  ),
-                ),
                 child: Center(
                   child: Text(
                     shortLabel,
@@ -215,14 +226,7 @@ class GoalPreviewStep extends ConsumerWidget {
   Widget _buildTimeColumn(ThemeData theme) {
     return Container(
       width: 50,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        border: Border(
-          right: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.3),
-          ),
-        ),
-      ),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
       child: Column(
         children: List.generate(_endHour - _startHour, (index) {
           final hour = _startHour + index;
@@ -297,19 +301,12 @@ class GoalPreviewStep extends ConsumerWidget {
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary,
                   borderRadius: BorderRadius.circular(6),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.3),
-                      blurRadius: 2,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
                 ),
-                child: height > 25
+                child: height > 30
                     ? Center(
                         child: Text(
                           session.isShort
-                              ? '${session.startTime}'
+                              ? session.startTime
                               : '${session.startTime}\n${session.endTime}',
                           style: theme.textTheme.labelSmall?.copyWith(
                             color: theme.colorScheme.onPrimary,
@@ -342,13 +339,11 @@ class GoalPreviewStep extends ConsumerWidget {
         final endHour = int.parse(endParts[0]);
         final endMin = int.parse(endParts[1]);
 
-        // Calculate how many sessions fit in this slot
         final startMinutes = startHour * 60 + startMin;
         final endMinutes = endHour * 60 + endMin;
         final totalMinutes = endMinutes - startMinutes;
         final numSessions = totalMinutes ~/ sessionDuration;
 
-        // Create session objects
         for (int i = 0; i < numSessions; i++) {
           final sessionStartMinutes = startMinutes + (i * sessionDuration);
           final sessionEndMinutes = sessionStartMinutes + sessionDuration;
@@ -381,7 +376,6 @@ class GoalPreviewStep extends ConsumerWidget {
     GoalCreationState state,
     ThemeData theme,
   ) {
-    // Calculate totals
     int totalSessions = 0;
     int totalMinutes = 0;
     int daysWithSlots = 0;
@@ -404,7 +398,7 @@ class GoalPreviewStep extends ConsumerWidget {
     });
 
     return Container(
-      margin: const EdgeInsets.only(top: 12),
+      margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: theme.colorScheme.tertiaryContainer,
@@ -456,7 +450,6 @@ class GoalPreviewStep extends ConsumerWidget {
   }
 }
 
-/// Session data class for visual calendar.
 class _Session {
   final String day;
   final String startTime;

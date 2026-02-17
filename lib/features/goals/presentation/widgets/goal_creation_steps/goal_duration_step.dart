@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:productivity/core/constants/app_constants.dart';
-import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/features/goals/presentation/state/goal_creation_provider.dart';
 
 /// Step 3: Session duration selection.
@@ -18,23 +17,22 @@ class GoalDurationStep extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
+        // Icon header
         _buildHeader(context, theme),
         const SizedBox(height: 24),
 
-        // Duration cards grid
-        _buildDurationGrid(context, state, notifier, theme),
+        // Duration options
+        _buildDurationOptions(context, state, notifier, theme),
         const SizedBox(height: 24),
 
-        // Info card
-        _buildDurationInfoCard(context, state.sessionDuration, theme),
+        // Helper card
+        _buildHelperCard(context, state, theme),
       ],
     );
   }
 
   Widget _buildHeader(BuildContext context, ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
         Container(
           padding: const EdgeInsets.all(12),
@@ -43,242 +41,190 @@ class GoalDurationStep extends ConsumerWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
-            Icons.timer_outlined,
+            Icons.timer,
             color: theme.colorScheme.onTertiaryContainer,
-            size: 28,
+            size: 24,
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          '¿Cuánto tiempo por sesión?',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Selecciona la duración ideal para cada sesión de trabajo.',
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '¿Cuánto tiempo por sesión?',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Elige la duración de cada sesión de trabajo',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ),
         ),
       ],
     );
   }
 
-  Widget _buildDurationGrid(
+  Widget _buildDurationOptions(
     BuildContext context,
     GoalCreationState state,
     GoalCreationNotifier notifier,
     ThemeData theme,
   ) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        childAspectRatio: 1.5,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: AppConstants.sessionDurations.length,
-      itemBuilder: (context, index) {
-        final duration = AppConstants.sessionDurations[index];
-        final isSelected = state.sessionDuration == duration;
+    return Center(
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 16,
+        alignment: WrapAlignment.center,
+        children: AppConstants.sessionDurations.map((duration) {
+          final isSelected = state.sessionDuration == duration;
 
-        return _DurationCard(
-          duration: duration,
-          isSelected: isSelected,
-          onTap: () => notifier.setSessionDuration(duration),
-          theme: theme,
-        );
-      },
+          return InkWell(
+            onTap: () => notifier.setSessionDuration(duration),
+            borderRadius: BorderRadius.circular(16),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 100,
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+                  width: isSelected ? 2.5 : 1,
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.3,
+                          ),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$duration',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: isSelected
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'min',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: isSelected
+                          ? theme.colorScheme.onPrimary.withValues(alpha: 0.9)
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  if (isSelected) ...[
+                    const SizedBox(height: 8),
+                    Icon(
+                      Icons.check_circle,
+                      size: 20,
+                      color: theme.colorScheme.onPrimary,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
-  Widget _buildDurationInfoCard(
+  Widget _buildHelperCard(
     BuildContext context,
-    int duration,
+    GoalCreationState state,
     ThemeData theme,
   ) {
-    final (icon, title, description) = _getDurationInfo(duration, theme);
+    final (icon, title, recommendation) = switch (state.sessionDuration) {
+      <= 30 => (
+        Icons.bolt,
+        'Sesión Express',
+        'Ideal para mantener alta concentración. Perfecto para tareas específicas y evitar fatiga.',
+      ),
+      <= 60 => (
+        Icons.trending_up,
+        'Equilibrio Óptimo',
+        'La duración más popular. Buen balance entre productividad y descanso mental.',
+      ),
+      _ => (
+        Icons.hourglass_full,
+        'Trabajo Profundo',
+        'Para sesiones intensas de aprendizaje. Recuerda hacer pausas cada 90 minutos.',
+      ),
+    };
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
+          color: theme.colorScheme.tertiary.withValues(alpha: 0.3),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(
-              icon,
-              color: theme.colorScheme.onPrimaryContainer,
-              size: 24,
-            ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiary,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  color: theme.colorScheme.onTertiary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.onTertiaryContainer,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 12),
+          Text(
+            recommendation,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onTertiaryContainer.withValues(
+                alpha: 0.9,
+              ),
+              height: 1.4,
             ),
           ),
         ],
       ),
     );
-  }
-
-  (IconData, String, String) _getDurationInfo(int duration, ThemeData theme) {
-    return switch (duration) {
-      30 => (
-        Icons.flash_on,
-        'Sesión express',
-        'Perfecta para mantener el enfoque y evitar fatiga.',
-      ),
-      45 => (
-        Icons.bolt,
-        'Sesión corta',
-        'Ideal para tareas pequeñas o cuando tienes poco tiempo.',
-      ),
-      60 => (
-        Icons.schedule,
-        'Sesión estándar',
-        'La duración clásica de Pomodoro extendido. Buen balance.',
-      ),
-      90 => (
-        Icons.hourglass_bottom,
-        'Sesión profunda',
-        'Perfecta para trabajo que requiere concentración intensa.',
-      ),
-      120 => (
-        Icons.timelapse,
-        'Sesión extendida',
-        'Para sesiones de trabajo profundo en bloques largos.',
-      ),
-      _ => (
-        Icons.timer,
-        'Sesión personalizada',
-        'Selecciona la duración que mejor se adapte a ti.',
-      ),
-    };
-  }
-}
-
-class _DurationCard extends StatelessWidget {
-  final int duration;
-  final bool isSelected;
-  final VoidCallback onTap;
-  final ThemeData theme;
-
-  const _DurationCard({
-    required this.duration,
-    required this.isSelected,
-    required this.onTap,
-    required this.theme,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? theme.colorScheme.primaryContainer
-              : theme.colorScheme.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isSelected
-                ? theme.colorScheme.primary
-                : theme.colorScheme.outlineVariant,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Duration value
-            Text(
-              AppDateUtils.formatDuration(duration),
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: isSelected
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Label
-            Text(
-              _getDurationLabel(duration),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: isSelected
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.onSurfaceVariant,
-                fontWeight: isSelected ? FontWeight.w500 : null,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            // Selection indicator
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: isSelected ? 24 : 0,
-              height: isSelected ? 24 : 0,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                shape: BoxShape.circle,
-              ),
-              child: isSelected
-                  ? Icon(
-                      Icons.check,
-                      color: theme.colorScheme.onPrimary,
-                      size: 16,
-                    )
-                  : null,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _getDurationLabel(int duration) {
-    return switch (duration) {
-      30 => 'Express',
-      45 => 'Corta',
-      60 => 'Estándar',
-      90 => 'Profunda',
-      120 => 'Extendida',
-      _ => 'Personalizada',
-    };
   }
 }
