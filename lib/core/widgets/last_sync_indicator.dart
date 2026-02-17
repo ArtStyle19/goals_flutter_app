@@ -8,8 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import 'package:productivity/app/theme/app_colors.dart';
-
 /// Provider for the last sync timestamp.
 /// This is a simple state provider that can be updated by notifiers.
 final lastSyncTimestampProvider = StateProvider<DateTime?>((ref) => null);
@@ -47,6 +45,7 @@ class LastSyncIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
 
     String text;
     IconData icon;
@@ -55,11 +54,11 @@ class LastSyncIndicator extends StatelessWidget {
     if (isLoading) {
       text = 'Sincronizando...';
       icon = Icons.sync;
-      color = AppColors.primary;
+      color = colorScheme.primary;
     } else if (timestamp == null) {
       text = 'Sin sincronizar';
       icon = Icons.sync_problem;
-      color = AppColors.textSecondary;
+      color = colorScheme.onSurfaceVariant;
     } else {
       final now = DateTime.now();
       final diff = now.difference(timestamp!);
@@ -81,11 +80,11 @@ class LastSyncIndicator extends StatelessWidget {
 
       // Color based on freshness
       if (diff.inHours < 1) {
-        color = AppColors.success;
+        color = colorScheme.secondary;
       } else if (diff.inDays < 1) {
-        color = AppColors.primary;
+        color = colorScheme.primary;
       } else {
-        color = AppColors.warning;
+        color = colorScheme.error;
       }
 
       icon = Icons.check_circle;

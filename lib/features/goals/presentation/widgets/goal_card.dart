@@ -5,6 +5,9 @@ import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/features/goals/domain/entities/goal_entity.dart';
 
 /// Card widget displaying a goal summary.
+///
+/// Designed with a modern, clean aesthetic using the "Zinc & Indigo" system.
+/// Focuses on title clarity and progress visualization.
 class GoalCard extends StatelessWidget {
   final GoalEntity goal;
   final VoidCallback? onTap;
@@ -15,48 +18,80 @@ class GoalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final progress = goal.progressPercentage / 100;
+    
+    final isCompleted = goal.status == GoalStatus.completed;
 
     return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ─── Title & Status ─────────────────────
+              // ─── Header: Title & Status ────────────────
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(_statusIcon, color: _statusColor, size: 20),
-                  const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      goal.title,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          goal.title,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.3, // Modern type feel
+                            height: 1.2,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (goal.description != null && goal.description!.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            goal.description!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                  _GoalStatusChip(status: goal.status),
+                  const SizedBox(width: 12),
+                  _StatusBadge(status: goal.status),
                 ],
               ),
-              if (goal.description != null && goal.description!.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  goal.description!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // ─── Animated Progress Bar ────────────
+              // ─── Progress Section ──────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Progreso',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    '${goal.progressPercentage.toStringAsFixed(0)}%',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: isCompleted ? AppColors.success : theme.colorScheme.onSurface,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              
+              // Animated Progress Bar
               TweenAnimationBuilder<double>(
                 tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
                 duration: const Duration(milliseconds: 600),
@@ -67,46 +102,32 @@ class GoalCard extends StatelessWidget {
                     value: value,
                     minHeight: 6,
                     backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                    valueColor: AlwaysStoppedAnimation(_statusColor),
+                    valueColor: AlwaysStoppedAnimation(
+                      isCompleted ? AppColors.success : AppColors.primary,
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
 
-              // ─── Footer Info ────────────────────────
+              const SizedBox(height: 16),
+              const Divider(height: 1), 
+              const SizedBox(height: 12),
+
+              // ─── Footer: Metadata ──────────────────────
               Row(
                 children: [
-                  Text(
-                    '${goal.progressPercentage.toStringAsFixed(0)}%',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: _statusColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${goal.completedTasksCount} de ${goal.tasksCount} tareas',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                  // Tasks Count
+                  _IconText(
+                    icon: Icons.checklist,
+                    text: '${goal.completedTasksCount}/${goal.tasksCount} tareas',
                   ),
                   const Spacer(),
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: goal.isOverdue
-                        ? AppColors.error
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    AppDateUtils.formatShort(goal.deadline),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: goal.isOverdue
-                          ? AppColors.error
-                          : theme.colorScheme.onSurfaceVariant,
-                      fontWeight: goal.isOverdue ? FontWeight.w600 : null,
-                    ),
+                  // Deadline
+                  _IconText(
+                    icon: Icons.calendar_today,
+                    text: AppDateUtils.formatShort(goal.deadline),
+                    isHighlight: goal.isOverdue && !isCompleted,
+                    highlightColor: AppColors.error,
                   ),
                 ],
               ),
@@ -123,43 +144,88 @@ class GoalCard extends StatelessWidget {
     GoalStatus.completed => AppColors.goalCompleted,
     GoalStatus.archived => AppColors.archived,
   };
-
-  IconData get _statusIcon => switch (goal.status) {
-    GoalStatus.draft => Icons.edit_note,
-    GoalStatus.active => Icons.flag,
-    GoalStatus.completed => Icons.check_circle,
-    GoalStatus.archived => Icons.archive,
-  };
 }
 
-class _GoalStatusChip extends StatelessWidget {
+/// A compact, pill-shaped badge for goal status.
+class _StatusBadge extends StatelessWidget {
   final GoalStatus status;
 
-  const _GoalStatusChip({required this.status});
+  const _StatusBadge({required this.status});
 
   @override
   Widget build(BuildContext context) {
-    final (label, color) = switch (status) {
-      GoalStatus.draft => ('Borrador', AppColors.draft),
-      GoalStatus.active => ('Activa', AppColors.active),
-      GoalStatus.completed => ('Completada', AppColors.goalCompleted),
-      GoalStatus.archived => ('Archivada', AppColors.archived),
+    final (label, color, icon) = switch (status) {
+      GoalStatus.draft => ('Borrador', AppColors.draft, Icons.edit),
+      GoalStatus.active => ('Activa', AppColors.active, Icons.play_arrow_rounded),
+      GoalStatus.completed => ('Completada', AppColors.goalCompleted, Icons.check),
+      GoalStatus.archived => ('Archivada', AppColors.archived, Icons.archive_outlined),
     };
+
+    // Use lighter background for the badge
+    final bgColor = color.withValues(alpha: 0.12);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.2), width: 1),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: color,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Helper for icon + text rows.
+class _IconText extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final bool isHighlight;
+  final Color? highlightColor;
+
+  const _IconText({
+    required this.icon,
+    required this.text,
+    this.isHighlight = false,
+    this.highlightColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = isHighlight 
+        ? (highlightColor ?? theme.colorScheme.error) 
+        : theme.colorScheme.onSurfaceVariant;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 4),
+        Text(
+          text,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: color,
+            fontWeight: isHighlight ? FontWeight.w600 : null,
+            fontSize: 12,
+          ),
         ),
-      ),
+      ],
     );
   }
 }
