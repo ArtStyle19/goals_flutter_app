@@ -8,6 +8,7 @@ import 'package:productivity/app/theme/theme_provider.dart';
 import 'package:productivity/core/error/error_handler.dart';
 import 'package:productivity/core/services/notification_scheduler.dart';
 import 'package:productivity/core/services/notification_service.dart';
+import 'package:productivity/core/services/scheduled_notification_service.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/core/widgets/confirmation_dialog.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
@@ -250,20 +251,20 @@ class _NotificationTestSectionState
   }
 
   Future<void> _loadScheduledNotifications() async {
-    final service = ref.read(notificationServiceProvider);
-    await service.loadScheduledTestNotifications();
-    final ids = service.getScheduledTestNotificationIds();
+    final service = ref.read(scheduledNotificationServiceProvider);
+    await service.restoreScheduledAlarms();
+    final ids = service.getScheduledAlarmIds();
 
     setState(() {
       _scheduledNotifications.clear();
-      // Convert IDs back to scheduled notifications (we store minimal info)
-      // In a real app, you might want to store more metadata
+      // Convert IDs back to scheduled notifications
+      // Note: The new service stores alarm data in SharedPreferences
       for (final id in ids) {
         _scheduledNotifications.add(
           _ScheduledNotification(
             id: id,
             scheduledTime:
-                DateTime.now(), // Placeholder - actual time not stored
+                DateTime.now(), // Placeholder - actual time from storage
           ),
         );
       }
@@ -293,6 +294,45 @@ class _NotificationTestSectionState
   }
 
   Future<void> _scheduleNotification() async {
+    // Check for exact alarm permission on Android 12+
+    final canScheduleExact = await NotificationService.canScheduleExactAlarms();
+    if (!canScheduleExact && mounted) {
+      final shouldRequest = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Permiso requerido'),
+          content: const Text(
+            'Para programar notificaciones exactas, necesitas habilitar el permiso '
+            '"Alarmas y recordatorios" en la configuración del sistema.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Abrir configuración'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldRequest == true) {
+        final granted = await NotificationService.requestExactAlarmPermission();
+        if (!granted && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Permiso no concedido. La notificación podría no ser exacta.',
+              ),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    }
+
     final now = DateTime.now();
     final initialDate = now.add(const Duration(minutes: 1));
 
@@ -339,26 +379,37 @@ class _NotificationTestSectionState
       return;
     }
 
-    final service = ref.read(notificationServiceProvider);
+    final service = ref.read(scheduledNotificationServiceProvider);
     final messenger = ScaffoldMessenger.of(context);
 
     try {
       final id = await service.scheduleTestNotification(scheduledDate);
 
-      setState(() {
-        _scheduledNotifications.add(
-          _ScheduledNotification(id: id, scheduledTime: scheduledDate),
-        );
-      });
+      if (id != null) {
+        setState(() {
+          _scheduledNotifications.add(
+            _ScheduledNotification(id: id, scheduledTime: scheduledDate),
+          );
+        });
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            '⏰ Notificación programada para ${AppDateUtils.formatFull(scheduledDate)}',
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '⏰ Notificación programada para ${AppDateUtils.formatFull(scheduledDate)}',
+            ),
+            duration: const Duration(seconds: 3),
           ),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+        );
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudo programar la notificación. Verifica los permisos de alarma.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -370,8 +421,8 @@ class _NotificationTestSectionState
   }
 
   Future<void> _cancelNotification(int id) async {
-    final service = ref.read(notificationServiceProvider);
-    await service.cancelTestNotification(id);
+    final service = ref.read(scheduledNotificationServiceProvider);
+    await service.cancelNotification(id);
 
     setState(() {
       _scheduledNotifications.removeWhere((n) => n.id == id);

@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -140,6 +142,9 @@ class NotificationService {
   /// Tracks scheduled test notification IDs.
   static final Set<int> _scheduledTestIds = {};
 
+  /// Android implementation for checking exact alarm permission.
+  static AndroidFlutterLocalNotificationsPlugin? _androidPlugin;
+
   NotificationService(this._prefs);
 
   /// Whether the user has enabled notifications.
@@ -208,6 +213,76 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.requestNotificationsPermission();
+
+    // Store Android plugin reference for exact alarm checks.
+    _androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    // Create notification channels for Android.
+    await _createNotificationChannels();
+  }
+
+  // ─── Android Notification Channels ─────────────────────
+
+  /// Creates all required notification channels for Android.
+  static Future<void> _createNotificationChannels() async {
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (androidPlugin == null) return;
+
+    // Test notifications channel - high importance for sound and vibration.
+    final testChannel = AndroidNotificationChannel(
+      NotificationChannels.testNotifications,
+      'Test de Notificaciones',
+      description: 'Notificaciones de prueba con sonido y vibración',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+    );
+
+    await androidPlugin.createNotificationChannel(testChannel);
+    dev.log('[NotificationService] Created test notification channel');
+  }
+
+  // ─── Exact Alarm Permission (Android 12+) ──────────────
+
+  /// Checks if the app has permission to schedule exact alarms.
+  /// Required for Android 12+ (API 31+).
+  static Future<bool> canScheduleExactAlarms() async {
+    if (_androidPlugin == null) return true; // iOS or not initialized.
+
+    try {
+      final canSchedule = await _androidPlugin!.canScheduleExactNotifications();
+      dev.log('[NotificationService] Can schedule exact alarms: $canSchedule');
+      return canSchedule ?? false;
+    } catch (e) {
+      dev.log(
+        '[NotificationService] Error checking exact alarm permission: $e',
+      );
+      return false;
+    }
+  }
+
+  /// Opens system settings to request exact alarm permission.
+  /// Returns true if the permission was granted after the user returned.
+  static Future<bool> requestExactAlarmPermission() async {
+    if (_androidPlugin == null) return true; // iOS or not initialized.
+
+    try {
+      await _androidPlugin!.requestExactAlarmsPermission();
+      // Check again after user returns from settings.
+      return await canScheduleExactAlarms();
+    } catch (e) {
+      dev.log(
+        '[NotificationService] Error requesting exact alarm permission: $e',
+      );
+      return false;
+    }
   }
 
   // ─── Response Handlers ─────────────────────────────────
@@ -525,17 +600,29 @@ class NotificationService {
   /// The notification will trigger exactly at [scheduledDate] with sound
   /// and vibration, even if the device is in doze mode or restarted.
   ///
+  /// For Android 12+, this requires the SCHEDULE_EXACT_ALARM permission.
+  /// If not granted, it will fall back to inexact scheduling.
+  ///
   /// Returns the notification ID that can be used to cancel it.
   Future<int> scheduleTestNotification(DateTime scheduledDate) async {
     if (!isEnabled) throw StateError('Notifications are disabled');
 
-    // Generate unique ID based on timestamp
+    // Check for exact alarm permission on Android 12+.
+    final canScheduleExact = await canScheduleExactAlarms();
+    if (!canScheduleExact) {
+      dev.log(
+        '[NotificationService] Exact alarm permission not granted, '
+        'falling back to inexact scheduling',
+      );
+    }
+
+    // Generate unique ID based on timestamp.
     final notificationId =
         _testIdOffset + DateTime.now().millisecondsSinceEpoch % 100000;
 
     final tzSchedule = tz.TZDateTime.from(scheduledDate, tz.local);
 
-    // Don't schedule if the time has already passed
+    // Don't schedule if the time has already passed.
     if (tzSchedule.isBefore(tz.TZDateTime.now(tz.local))) {
       throw ArgumentError('Cannot schedule notification in the past');
     }
@@ -543,6 +630,16 @@ class NotificationService {
     const title = '⏰ Notificación Programada';
     final body =
         'Esta notificación fue programada para: ${_formatDateTime(scheduledDate)}';
+
+    // Use exact scheduling if permitted, otherwise fall back to inexact.
+    final scheduleMode = canScheduleExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    dev.log(
+      '[NotificationService] Scheduling notification $notificationId '
+      'for $tzSchedule with mode: $scheduleMode',
+    );
 
     await _plugin.zonedSchedule(
       notificationId,
@@ -562,7 +659,8 @@ class NotificationService {
           color: const Color(0xFF6366F1),
           category: AndroidNotificationCategory.reminder,
           styleInformation: BigTextStyleInformation(
-            '$body\n\n¡La notificación programada funcionó correctamente! El dispositivo reiniciado o apagado no afectó la programación.',
+            '$body\n\n¡La notificación programada funcionó correctamente! '
+            'El dispositivo reiniciado o apagado no afectó la programación.',
             contentTitle: title,
             summaryText: 'Productivity Planner',
           ),
@@ -575,13 +673,18 @@ class NotificationService {
           interruptionLevel: InterruptionLevel.timeSensitive,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: scheduleMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
 
     _scheduledTestIds.add(notificationId);
     await _saveScheduledTestNotifications();
+
+    dev.log(
+      '[NotificationService] Scheduled notification $notificationId '
+      'successfully',
+    );
 
     return notificationId;
   }

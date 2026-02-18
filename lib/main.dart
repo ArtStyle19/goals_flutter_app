@@ -11,6 +11,7 @@ import 'package:productivity/app/router/routes.dart';
 import 'package:productivity/core/network/api_interceptors.dart';
 import 'package:productivity/core/services/notification_scheduler.dart';
 import 'package:productivity/core/services/notification_service.dart';
+import 'package:productivity/core/services/scheduled_notification_service.dart';
 import 'package:productivity/features/calendar/presentation/state/calendar_provider.dart';
 import 'package:productivity/features/tasks/presentation/state/task_provider.dart';
 
@@ -49,6 +50,14 @@ Future<void> main() async {
     onTap: _onNotificationTap,
     onComplete: _onNotificationComplete,
   );
+
+  // Initialize Android Alarm Manager for reliable scheduled notifications.
+  await ScheduledNotificationService.initialize();
+
+  // Restore any persisted scheduled alarms.
+  await _container
+      .read(scheduledNotificationServiceProvider)
+      .restoreScheduledAlarms();
 
   // Initialize the centralized notification scheduler.
   // It listens to auth state + app lifecycle to keep notifications in sync.
