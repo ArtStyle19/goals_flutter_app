@@ -6,9 +6,10 @@ import 'package:share_plus/share_plus.dart';
 import 'package:productivity/app/router/routes.dart';
 import 'package:productivity/app/theme/theme_provider.dart';
 import 'package:productivity/core/error/error_handler.dart';
+import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/core/services/notification_scheduler.dart';
 import 'package:productivity/core/services/notification_service.dart';
-import 'package:productivity/core/services/scheduled_notification_service.dart';
+import 'package:productivity/core/services/fcm_service.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/core/widgets/confirmation_dialog.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
@@ -114,7 +115,7 @@ class SettingsPage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(left: 16, top: 16, bottom: 4),
             child: Text(
-              'Notificaciones',
+              'Notificaciones Locales',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.primary,
                 fontWeight: FontWeight.w600,
@@ -122,6 +123,21 @@ class SettingsPage extends ConsumerWidget {
             ),
           ),
           _NotificationTestSection(),
+
+          const Divider(),
+
+          // ─── FCM Push Notifications ───────────────
+          Padding(
+            padding: const EdgeInsets.only(left: 16, top: 16, bottom: 4),
+            child: Text(
+              'Notificaciones Push (FCM)',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          _FCMTestSection(),
 
           const Divider(),
 
@@ -251,20 +267,17 @@ class _NotificationTestSectionState
   }
 
   Future<void> _loadScheduledNotifications() async {
-    final service = ref.read(scheduledNotificationServiceProvider);
-    await service.restoreScheduledAlarms();
-    final ids = service.getScheduledAlarmIds();
+    // Load from local storage using NotificationService
+    final service = ref.read(notificationServiceProvider);
+    final ids = await service.getScheduledTestNotificationIds();
 
     setState(() {
       _scheduledNotifications.clear();
-      // Convert IDs back to scheduled notifications
-      // Note: The new service stores alarm data in SharedPreferences
       for (final id in ids) {
         _scheduledNotifications.add(
           _ScheduledNotification(
             id: id,
-            scheduledTime:
-                DateTime.now(), // Placeholder - actual time from storage
+            scheduledTime: DateTime.now(), // Will be loaded from storage
           ),
         );
       }
@@ -379,37 +392,26 @@ class _NotificationTestSectionState
       return;
     }
 
-    final service = ref.read(scheduledNotificationServiceProvider);
+    final service = ref.read(notificationServiceProvider);
     final messenger = ScaffoldMessenger.of(context);
 
     try {
       final id = await service.scheduleTestNotification(scheduledDate);
 
-      if (id != null) {
-        setState(() {
-          _scheduledNotifications.add(
-            _ScheduledNotification(id: id, scheduledTime: scheduledDate),
-          );
-        });
+      setState(() {
+        _scheduledNotifications.add(
+          _ScheduledNotification(id: id, scheduledTime: scheduledDate),
+        );
+      });
 
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              '⏰ Notificación programada para ${AppDateUtils.formatFull(scheduledDate)}',
-            ),
-            duration: const Duration(seconds: 3),
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '⏰ Notificación programada para ${AppDateUtils.formatFull(scheduledDate)}',
           ),
-        );
-      } else {
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No se pudo programar la notificación. Verifica los permisos de alarma.',
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+          duration: const Duration(seconds: 3),
+        ),
+      );
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(
@@ -421,8 +423,8 @@ class _NotificationTestSectionState
   }
 
   Future<void> _cancelNotification(int id) async {
-    final service = ref.read(scheduledNotificationServiceProvider);
-    await service.cancelNotification(id);
+    final service = ref.read(notificationServiceProvider);
+    await service.cancelTestNotification(id);
 
     setState(() {
       _scheduledNotifications.removeWhere((n) => n.id == id);
@@ -587,4 +589,361 @@ class _ScheduledNotification {
   final DateTime scheduledTime;
 
   const _ScheduledNotification({required this.id, required this.scheduledTime});
+}
+
+/// Section for testing FCM push notifications from backend.
+class _FCMTestSection extends ConsumerStatefulWidget {
+  const _FCMTestSection();
+
+  @override
+  ConsumerState<_FCMTestSection> createState() => _FCMTestSectionState();
+}
+
+class _FCMTestSectionState extends ConsumerState<_FCMTestSection> {
+  bool _isLoading = false;
+  String? _fcmToken;
+  Map<String, dynamic>? _backendStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFCMToken();
+  }
+
+  Future<void> _loadFCMToken() async {
+    final fcmService = ref.read(fcmServiceProvider);
+    try {
+      final token = await fcmService.getToken();
+      if (mounted) {
+        setState(() => _fcmToken = token);
+      }
+    } catch (e) {
+      // Token might not be available yet
+    }
+  }
+
+  Future<void> _sendTestNotificationFromBackend() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      await fcmService.sendTestNotificationFromBackend(
+        title: '🔔 Test desde Backend',
+        body: 'Esta notificación fue enviada desde Laravel via FCM!',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '✅ Notificación enviada desde el backend. Espera unos segundos...',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error: ${userFriendlyMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _checkBackendStatus() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      final status = await fcmService.getBackendStatus();
+
+      if (mounted) {
+        setState(() => _backendStatus = status);
+        _showStatusDialog(status);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error: ${userFriendlyMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showStatusDialog(Map<String, dynamic> status) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Estado FCM Backend'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildStatusRow(
+                'FCM Configurado',
+                status['fcm_configured'] == true,
+              ),
+              _buildStatusRow('Token Registrado', status['has_token'] == true),
+              _buildStatusRow(
+                'Usuario Autenticado',
+                status['authenticated'] == true,
+              ),
+              if (status['error'] != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Error: ${status['error']}',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(String label, bool value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            value ? Icons.check_circle : Icons.cancel,
+            color: value ? Colors.green : Colors.red,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _copyTokenToClipboard() async {
+    if (_fcmToken == null) return;
+
+    // Note: In a real app, you'd use Clipboard.setData
+    // For now, just show the token
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('FCM Token'),
+        content: SelectableText(
+          _fcmToken!,
+          style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cerrar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reregisterToken() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      final success = await fcmService.registerTokenWithBackend();
+
+      if (mounted) {
+        if (success) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '✅ Token re-registrado exitosamente con el backend',
+              ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                '❌ No se pudo re-registrar el token. Verifica logs.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error: ${userFriendlyMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Test push notification from backend
+        ListTile(
+          leading: Icon(
+            Icons.cloud_upload_outlined,
+            color: theme.colorScheme.primary,
+          ),
+          title: const Text('Test Notificación Push'),
+          subtitle: const Text('Envía notificación desde Laravel via FCM'),
+          trailing: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : ElevatedButton.icon(
+                  onPressed: _sendTestNotificationFromBackend,
+                  icon: const Icon(Icons.send, size: 18),
+                  label: const Text('Enviar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                    foregroundColor: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+        ),
+
+        // Check backend status
+        ListTile(
+          leading: Icon(
+            Icons.cloud_done_outlined,
+            color: theme.colorScheme.secondary,
+          ),
+          title: const Text('Verificar Estado Backend'),
+          subtitle: const Text(
+            'Comprueba si FCM está configurado correctamente',
+          ),
+          trailing: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : ElevatedButton.icon(
+                  onPressed: _checkBackendStatus,
+                  icon: const Icon(Icons.check, size: 18),
+                  label: const Text('Verificar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.secondaryContainer,
+                    foregroundColor: theme.colorScheme.onSecondaryContainer,
+                  ),
+                ),
+        ),
+
+        // Show FCM token
+        if (_fcmToken != null)
+          ListTile(
+            leading: Icon(
+              Icons.vpn_key_outlined,
+              color: theme.colorScheme.tertiary,
+            ),
+            title: const Text('Ver FCM Token'),
+            subtitle: Text(
+              '${_fcmToken!.substring(0, 20)}...',
+              style: theme.textTheme.bodySmall,
+            ),
+            trailing: TextButton.icon(
+              onPressed: _copyTokenToClipboard,
+              icon: const Icon(Icons.visibility, size: 18),
+              label: const Text('Ver'),
+            ),
+          ),
+
+        // Re-register token button
+        ListTile(
+          leading: Icon(Icons.sync_outlined, color: theme.colorScheme.error),
+          title: const Text('Re-registrar Token'),
+          subtitle: const Text(
+            'Fuerza el re-registro del token FCM con el backend',
+          ),
+          trailing: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : ElevatedButton.icon(
+                  onPressed: _reregisterToken,
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('Re-registrar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.errorContainer,
+                    foregroundColor: theme.colorScheme.onErrorContainer,
+                  ),
+                ),
+        ),
+
+        // Info text
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Las notificaciones push (FCM) requieren que el backend Laravel '
+                    'tenga configurado Firebase Cloud Messaging. Asegúrate de que '
+                    'el servidor tenga las credenciales de Firebase.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

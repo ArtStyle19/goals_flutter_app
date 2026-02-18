@@ -1,0 +1,83 @@
+import 'dart:developer' as dev;
+
+import 'package:productivity/core/error/exceptions.dart';
+import 'package:productivity/core/network/api_client.dart';
+import 'package:productivity/core/network/api_endpoints.dart';
+
+/// Remote data source for FCM (Firebase Cloud Messaging) operations.
+///
+/// Handles communication with the backend to:
+/// - Register FCM tokens
+/// - Remove FCM tokens (on logout)
+/// - Send test notifications
+/// - Check notification service status
+class FCMRemoteDataSource {
+  final ApiClient _apiClient;
+
+  const FCMRemoteDataSource(this._apiClient);
+
+  // ─── Token Management ───────────────────────────────────────────────────
+
+  /// Register FCM token with the backend.
+  ///
+  /// Called after obtaining FCM token from Firebase.
+  /// Backend will store this token to send push notifications.
+  Future<void> registerToken(String fcmToken) async {
+    try {
+      await _apiClient.post(
+        ApiEndpoints.fcmToken,
+        data: {'fcm_token': fcmToken},
+        parser: (data) => data,
+      );
+    } catch (e) {
+      throw ServerException('Failed to register FCM token: $e');
+    }
+  }
+
+  /// Remove FCM token from the backend.
+  ///
+  /// Called on logout to stop receiving notifications.
+  Future<void> removeToken() async {
+    try {
+      await _apiClient.delete(ApiEndpoints.fcmToken, parser: (data) => data);
+    } catch (e) {
+      throw ServerException('Failed to remove FCM token: $e');
+    }
+  }
+
+  // ─── Test & Status ──────────────────────────────────────────────────────
+
+  /// Send a test notification from the backend.
+  ///
+  /// Useful for verifying that FCM integration is working correctly.
+  Future<void> sendTestNotification({
+    String? title,
+    String? body,
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      await _apiClient.post(
+        ApiEndpoints.testNotification,
+        data: {'title': title, 'body': body, 'data': data},
+        parser: (data) => data,
+      );
+    } catch (e) {
+      throw ServerException('Failed to send test notification: $e');
+    }
+  }
+
+  /// Check FCM service status on the backend.
+  ///
+  /// Returns status information about the notification service.
+  Future<Map<String, dynamic>> getStatus() async {
+    try {
+      final response = await _apiClient.get(
+        ApiEndpoints.notificationStatus,
+        parser: (data) => data as Map<String, dynamic>,
+      );
+      return response;
+    } catch (e) {
+      throw ServerException('Failed to get notification status: $e');
+    }
+  }
+}

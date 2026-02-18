@@ -32,4 +32,9 @@ abstract final class ApiEndpoints {
   static const String calendar = '/calendar';
   static const String today = '/today';
   static const String nextTask = '/next';
+
+  // ─── FCM Notifications ─────────────────────────────────
+  static const String fcmToken = '/user/fcm-token';
+  static const String testNotification = '/test-notification';
+  static const String notificationStatus = '/notification-status';
 }

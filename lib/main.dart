@@ -9,9 +9,8 @@ import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/app/router/app_router.dart';
 import 'package:productivity/app/router/routes.dart';
 import 'package:productivity/core/network/api_interceptors.dart';
-import 'package:productivity/core/services/notification_scheduler.dart';
 import 'package:productivity/core/services/notification_service.dart';
-import 'package:productivity/core/services/scheduled_notification_service.dart';
+import 'package:productivity/core/services/fcm_remote_datasource.dart';
 import 'package:productivity/features/calendar/presentation/state/calendar_provider.dart';
 import 'package:productivity/features/tasks/presentation/state/task_provider.dart';
 
@@ -44,24 +43,18 @@ Future<void> main() async {
     ],
   );
 
-  // Initialize local notifications with the detected timezone + callbacks.
+  // Initialize Firebase Cloud Messaging (FCM) with backend sync.
+  final fcmService = _container.read(fcmServiceProvider);
+  final fcmRemoteDataSource = _container.read(fcmRemoteDataSourceProvider);
+  fcmService.setRemoteDataSource(fcmRemoteDataSource);
+  await fcmService.initialize();
+
+  // Initialize local notifications for ongoing task notifications.
   await NotificationService.initialize(
     ianaTimezone: timezoneInterceptor.currentTimezone,
     onTap: _onNotificationTap,
     onComplete: _onNotificationComplete,
   );
-
-  // Initialize Android Alarm Manager for reliable scheduled notifications.
-  await ScheduledNotificationService.initialize();
-
-  // Restore any persisted scheduled alarms.
-  await _container
-      .read(scheduledNotificationServiceProvider)
-      .restoreScheduledAlarms();
-
-  // Initialize the centralized notification scheduler.
-  // It listens to auth state + app lifecycle to keep notifications in sync.
-  _container.read(notificationSchedulerProvider).initialize();
 
   runApp(
     UncontrolledProviderScope(
@@ -93,9 +86,6 @@ Future<void> _onNotificationComplete(int taskId) async {
     // Refresh today data so the UI updates if visible.
     _container.invalidate(todayProvider);
     _container.invalidate(nextTaskProvider);
-
-    // Re-sync notifications so the next active task gets a notification.
-    _container.read(notificationSchedulerProvider).syncNow();
   } catch (_) {
     // Silently fail — the user can retry from the app.
   }

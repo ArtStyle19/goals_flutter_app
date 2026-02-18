@@ -13,6 +13,8 @@ import 'package:productivity/core/constants/api_constants.dart';
 import 'package:productivity/core/database/app_database.dart';
 import 'package:productivity/core/network/api_client.dart';
 import 'package:productivity/core/network/api_interceptors.dart';
+import 'package:productivity/core/services/fcm_service.dart';
+import 'package:productivity/core/services/fcm_remote_datasource.dart';
 
 // ─── Auth imports ─────────────────────────────────────────
 import 'package:productivity/features/auth/data/datasources/auth_local_datasource.dart';
@@ -96,6 +98,16 @@ final dioProvider = Provider<Dio>((ref) {
 /// API client wrapper.
 final apiClientProvider = Provider<ApiClient>((ref) {
   return ApiClient(ref.watch(dioProvider));
+});
+
+/// FCM service for push notifications.
+final fcmServiceProvider = Provider<FCMService>((ref) {
+  return FCMService();
+});
+
+/// FCM remote data source for backend communication.
+final fcmRemoteDataSourceProvider = Provider<FCMRemoteDataSource>((ref) {
+  return FCMRemoteDataSource(ref.watch(apiClientProvider));
 });
 
 // ═══════════════════════════════════════════════════════════
