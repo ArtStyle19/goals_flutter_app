@@ -28,8 +28,9 @@ class AvailabilityRules extends Table {
   @override
   String? get tableName => 'availability_rules';
 
-  @override
-  List<String> get customConstraints => [
-    'CREATE INDEX IF NOT EXISTS idx_availability_rules_goal_id ON availability_rules(goal_id)',
-  ];
+  // Error: Drift does not support custom indexes directly in the table definition.
+  // @override
+  // List<String> get customConstraints => [
+  //   'CREATE INDEX IF NOT EXISTS idx_availability_rules_goal_id ON availability_rules(goal_id)',
+  // ];
 }
