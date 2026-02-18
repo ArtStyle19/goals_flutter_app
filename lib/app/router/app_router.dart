@@ -125,10 +125,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // ─── Main Shell (Bottom Nav) ──────────────
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         parentNavigatorKey: rootNavigatorKey,
+        navigatorContainerBuilder: (context, navigationShell, children) {
+          return MainShell(
+            navigationShell: navigationShell,
+            children: children,
+          );
+        },
         builder: (context, state, navigationShell) {
-          return MainShell(navigationShell: navigationShell);
+          return navigationShell;
         },
         branches: [
           // Tab 1: Goals

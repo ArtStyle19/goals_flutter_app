@@ -138,12 +138,7 @@ class GoalCard extends StatelessWidget {
     );
   }
 
-  Color get _statusColor => switch (goal.status) {
-    GoalStatus.draft => AppColors.draft,
-    GoalStatus.active => AppColors.active,
-    GoalStatus.completed => AppColors.goalCompleted,
-    GoalStatus.archived => AppColors.archived,
-  };
+
 }
 
 /// A compact, pill-shaped badge for goal status.
