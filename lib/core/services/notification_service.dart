@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -25,6 +26,9 @@ abstract final class NotificationChannels {
 
   /// Persistent notification while a task is in progress.
   static const activeTasks = 'active_tasks';
+
+  /// Test notifications for configuration/testing.
+  static const testNotifications = 'test_notifications';
 }
 
 /// Action identifiers attached to notification buttons.
@@ -36,6 +40,18 @@ abstract final class NotificationActions {
 /// Offset added to a task ID so that the *ongoing* notification uses a
 /// different system-notification-ID than the *reminder* for the same task.
 const _ongoingIdOffset = 100000;
+
+/// Offset for test notification IDs to avoid conflicts with task notifications.
+const _testIdOffset = 200000;
+
+/// SharedPreferences key for storing scheduled test notifications.
+const _kScheduledTestNotifications = 'scheduled_test_notifications';
+
+/// Payload action identifier for test notifications.
+abstract final class TestNotificationActions {
+  static const instant = 'test_instant';
+  static const scheduled = 'test_scheduled';
+}
 
 // ═══════════════════════════════════════════════════════════
 // NOTIFICATION PAYLOAD
@@ -120,6 +136,9 @@ class NotificationService {
   /// Tracks scheduled reminder notification IDs so we can cancel only
   /// reminders without touching ongoing task notifications.
   static final Set<int> _scheduledReminderIds = {};
+
+  /// Tracks scheduled test notification IDs.
+  static final Set<int> _scheduledTestIds = {};
 
   NotificationService(this._prefs);
 
@@ -450,5 +469,160 @@ class NotificationService {
   Future<void> cancelAll() async {
     await _plugin.cancelAll();
     _scheduledReminderIds.clear();
+    _scheduledTestIds.clear();
+    await _prefs.remove(_kScheduledTestNotifications);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TEST NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  /// Shows an instant test notification immediately with sound and vibration.
+  ///
+  /// Used for testing notification configuration in the settings page.
+  Future<void> showTestNotification() async {
+    if (!isEnabled) return;
+
+    const title = '🔔 Test de Notificación';
+    const body = '¡Las notificaciones están funcionando correctamente!';
+
+    await _plugin.show(
+      _testIdOffset,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          NotificationChannels.testNotifications,
+          'Test de Notificaciones',
+          channelDescription:
+              'Notificaciones de prueba para verificar configuración',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+          color: const Color(0xFF6366F1),
+          category: AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(
+            '$body\n\nEsta es una notificación de prueba. Si puedes ver esto y escuchar el sonido, la configuración es correcta.',
+            contentTitle: title,
+            summaryText: 'Productivity Planner',
+          ),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          presentBadge: true,
+          sound: 'default',
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      ),
+    );
+  }
+
+  /// Schedules a test notification at the specified date and time.
+  ///
+  /// The notification will trigger exactly at [scheduledDate] with sound
+  /// and vibration, even if the device is in doze mode or restarted.
+  ///
+  /// Returns the notification ID that can be used to cancel it.
+  Future<int> scheduleTestNotification(DateTime scheduledDate) async {
+    if (!isEnabled) throw StateError('Notifications are disabled');
+
+    // Generate unique ID based on timestamp
+    final notificationId =
+        _testIdOffset + DateTime.now().millisecondsSinceEpoch % 100000;
+
+    final tzSchedule = tz.TZDateTime.from(scheduledDate, tz.local);
+
+    // Don't schedule if the time has already passed
+    if (tzSchedule.isBefore(tz.TZDateTime.now(tz.local))) {
+      throw ArgumentError('Cannot schedule notification in the past');
+    }
+
+    const title = '⏰ Notificación Programada';
+    final body =
+        'Esta notificación fue programada para: ${_formatDateTime(scheduledDate)}';
+
+    await _plugin.zonedSchedule(
+      notificationId,
+      title,
+      body,
+      tzSchedule,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          NotificationChannels.testNotifications,
+          'Test de Notificaciones',
+          channelDescription: 'Notificaciones de prueba programadas',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+          color: const Color(0xFF6366F1),
+          category: AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(
+            '$body\n\n¡La notificación programada funcionó correctamente! El dispositivo reiniciado o apagado no afectó la programación.',
+            contentTitle: title,
+            summaryText: 'Productivity Planner',
+          ),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          presentBadge: true,
+          sound: 'default',
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+
+    _scheduledTestIds.add(notificationId);
+    await _saveScheduledTestNotifications();
+
+    return notificationId;
+  }
+
+  /// Cancels a specific scheduled test notification.
+  Future<void> cancelTestNotification(int notificationId) async {
+    await _plugin.cancel(notificationId);
+    _scheduledTestIds.remove(notificationId);
+    await _saveScheduledTestNotifications();
+  }
+
+  /// Gets all currently scheduled test notification IDs.
+  Set<int> getScheduledTestNotificationIds() {
+    return Set.unmodifiable(_scheduledTestIds);
+  }
+
+  /// Persists scheduled test notification IDs to SharedPreferences.
+  Future<void> _saveScheduledTestNotifications() async {
+    final list = _scheduledTestIds.toList();
+    await _prefs.setStringList(
+      _kScheduledTestNotifications,
+      list.map((id) => id.toString()).toList(),
+    );
+  }
+
+  /// Loads scheduled test notification IDs from SharedPreferences.
+  Future<void> loadScheduledTestNotifications() async {
+    final list = _prefs.getStringList(_kScheduledTestNotifications);
+    if (list != null) {
+      _scheduledTestIds.clear();
+      _scheduledTestIds.addAll(list.map((s) => int.parse(s)));
+    }
+  }
+
+  /// Formats DateTime for display in notification body.
+  String _formatDateTime(DateTime dateTime) {
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final year = dateTime.year;
+    return '$day/$month/$year $hour:$minute';
   }
 }

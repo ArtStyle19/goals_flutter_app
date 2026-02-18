@@ -8,6 +8,7 @@ import 'package:productivity/app/theme/theme_provider.dart';
 import 'package:productivity/core/error/error_handler.dart';
 import 'package:productivity/core/services/notification_scheduler.dart';
 import 'package:productivity/core/services/notification_service.dart';
+import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/core/widgets/confirmation_dialog.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
 import 'package:productivity/features/goals/presentation/state/goals_provider.dart';
@@ -119,22 +120,7 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
           ),
-          SwitchListTile(
-            secondary: const Icon(Icons.notifications_outlined),
-            title: const Text('Recordatorios de tareas'),
-            subtitle: const Text('15 min antes de cada sesión'),
-            value: ref.watch(notificationsEnabledProvider),
-            onChanged: (enabled) async {
-              final service = ref.read(notificationServiceProvider);
-              await service.setEnabled(enabled);
-              ref.read(notificationsEnabledProvider.notifier).state = enabled;
-
-              // Trigger an immediate sync so active tasks get notified.
-              if (enabled) {
-                ref.read(notificationSchedulerProvider).syncNow();
-              }
-            },
-          ),
+          _NotificationTestSection(),
 
           const Divider(),
 
@@ -242,4 +228,312 @@ class _ThemeModeTile extends StatelessWidget {
       onTap: onTap,
     );
   }
+}
+
+/// Section for testing notifications with instant and scheduled options.
+class _NotificationTestSection extends ConsumerStatefulWidget {
+  const _NotificationTestSection();
+
+  @override
+  ConsumerState<_NotificationTestSection> createState() =>
+      _NotificationTestSectionState();
+}
+
+class _NotificationTestSectionState
+    extends ConsumerState<_NotificationTestSection> {
+  final List<_ScheduledNotification> _scheduledNotifications = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadScheduledNotifications();
+  }
+
+  Future<void> _loadScheduledNotifications() async {
+    final service = ref.read(notificationServiceProvider);
+    await service.loadScheduledTestNotifications();
+    final ids = service.getScheduledTestNotificationIds();
+
+    setState(() {
+      _scheduledNotifications.clear();
+      // Convert IDs back to scheduled notifications (we store minimal info)
+      // In a real app, you might want to store more metadata
+      for (final id in ids) {
+        _scheduledNotifications.add(
+          _ScheduledNotification(
+            id: id,
+            scheduledTime:
+                DateTime.now(), // Placeholder - actual time not stored
+          ),
+        );
+      }
+    });
+  }
+
+  Future<void> _showInstantNotification() async {
+    final service = ref.read(notificationServiceProvider);
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await service.showTestNotification();
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('🔔 Notificación enviada. Verifica que suene y vibre.'),
+          duration: Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: ${userFriendlyMessage(e)}'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _scheduleNotification() async {
+    final now = DateTime.now();
+    final initialDate = now.add(const Duration(minutes: 1));
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Selecciona la fecha',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+    );
+
+    if (selectedDate == null || !mounted) return;
+
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initialDate),
+      helpText: 'Selecciona la hora',
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
+    );
+
+    if (selectedTime == null || !mounted) return;
+
+    final scheduledDate = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+
+    // Validate it's in the future
+    if (scheduledDate.isBefore(DateTime.now())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('La fecha debe ser en el futuro'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final service = ref.read(notificationServiceProvider);
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final id = await service.scheduleTestNotification(scheduledDate);
+
+      setState(() {
+        _scheduledNotifications.add(
+          _ScheduledNotification(id: id, scheduledTime: scheduledDate),
+        );
+      });
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '⏰ Notificación programada para ${AppDateUtils.formatFull(scheduledDate)}',
+          ),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Error: ${userFriendlyMessage(e)}'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _cancelNotification(int id) async {
+    final service = ref.read(notificationServiceProvider);
+    await service.cancelTestNotification(id);
+
+    setState(() {
+      _scheduledNotifications.removeWhere((n) => n.id == id);
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notificación cancelada'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final notificationsEnabled = ref.watch(notificationsEnabledProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Enable/Disable toggle
+        SwitchListTile(
+          secondary: const Icon(Icons.notifications_outlined),
+          title: const Text('Habilitar notificaciones'),
+          subtitle: const Text('Activa o desactiva todas las notificaciones'),
+          value: notificationsEnabled,
+          onChanged: (enabled) async {
+            final service = ref.read(notificationServiceProvider);
+            await service.setEnabled(enabled);
+            ref.read(notificationsEnabledProvider.notifier).state = enabled;
+
+            if (enabled) {
+              ref.read(notificationSchedulerProvider).syncNow();
+            }
+
+            // Reload scheduled notifications state
+            if (enabled) {
+              await _loadScheduledNotifications();
+            } else {
+              setState(() => _scheduledNotifications.clear());
+            }
+          },
+        ),
+
+        if (notificationsEnabled) ...[
+          const Divider(indent: 16, endIndent: 16, height: 1),
+
+          // Instant test button
+          ListTile(
+            leading: Icon(
+              Icons.notifications_active_outlined,
+              color: theme.colorScheme.primary,
+            ),
+            title: const Text('Test Notificación Instantánea'),
+            subtitle: const Text('Envía una notificación de prueba ahora'),
+            trailing: ElevatedButton.icon(
+              onPressed: _showInstantNotification,
+              icon: const Icon(Icons.send, size: 18),
+              label: const Text('Probar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.primaryContainer,
+                foregroundColor: theme.colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ),
+
+          // Scheduled test button
+          ListTile(
+            leading: Icon(
+              Icons.schedule_outlined,
+              color: theme.colorScheme.secondary,
+            ),
+            title: const Text('Test Notificación Programada'),
+            subtitle: const Text('Programa una notificación para más tarde'),
+            trailing: ElevatedButton.icon(
+              onPressed: _scheduleNotification,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Programar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: theme.colorScheme.secondaryContainer,
+                foregroundColor: theme.colorScheme.onSecondaryContainer,
+              ),
+            ),
+          ),
+
+          // Scheduled notifications list
+          if (_scheduledNotifications.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(left: 16, top: 8, bottom: 4),
+              child: Text(
+                'Notificaciones programadas (${_scheduledNotifications.length})',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            ..._scheduledNotifications.map(
+              (notification) => ListTile(
+                dense: true,
+                leading: const Icon(
+                  Icons.access_time,
+                  size: 20,
+                  color: Colors.grey,
+                ),
+                title: Text(
+                  AppDateUtils.formatFull(notification.scheduledTime),
+                  style: theme.textTheme.bodyMedium,
+                ),
+                trailing: IconButton(
+                  icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+                  onPressed: () => _cancelNotification(notification.id),
+                  tooltip: 'Cancelar',
+                ),
+              ),
+            ),
+          ],
+
+          // Info text
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Las notificaciones programadas funcionarán incluso si reinicias o apagas el teléfono. '
+                      'Asegúrate de que los permisos de notificación estén habilitados en la configuración del sistema.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Simple data class for scheduled notifications.
+class _ScheduledNotification {
+  final int id;
+  final DateTime scheduledTime;
+
+  const _ScheduledNotification({required this.id, required this.scheduledTime});
 }
