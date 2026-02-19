@@ -657,6 +657,41 @@ class _FCMTestSectionState extends ConsumerState<_FCMTestSection> {
     }
   }
 
+  Future<void> _sendTestNotificationWithActions() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      await fcmService.sendTestNotificationWithActionsFromBackend(
+        title: '🧪 Test con Botones',
+        body: 'Esta notificación tiene botones de acción: Completar y Omitir',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              '✅ Notificación con botones enviada. Toca los botones cuando llegue!',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ Error: ${userFriendlyMessage(e)}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _checkBackendStatus() async {
     setState(() => _isLoading = true);
 
@@ -837,6 +872,31 @@ class _FCMTestSectionState extends ConsumerState<_FCMTestSection> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: theme.colorScheme.primaryContainer,
                     foregroundColor: theme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+        ),
+
+        // Test notification with action buttons
+        ListTile(
+          leading: Icon(
+            Icons.touch_app_outlined,
+            color: theme.colorScheme.tertiary,
+          ),
+          title: const Text('Test con Botones de Acción'),
+          subtitle: const Text('Notificación con botones Completar/Omitir'),
+          trailing: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : ElevatedButton.icon(
+                  onPressed: _sendTestNotificationWithActions,
+                  icon: const Icon(Icons.smart_button, size: 18),
+                  label: const Text('Probar'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.tertiaryContainer,
+                    foregroundColor: theme.colorScheme.onTertiaryContainer,
                   ),
                 ),
         ),

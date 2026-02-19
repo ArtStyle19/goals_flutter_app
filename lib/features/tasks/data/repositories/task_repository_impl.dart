@@ -114,4 +114,36 @@ class TaskRepositoryImpl implements TaskRepository {
       rethrow;
     }
   }
+
+  @override
+  Future<TaskEntity> completeTaskFromNotification(int id) async {
+    try {
+      final model = await _remoteDataSource.completeTaskFromNotification(id);
+      // Update both task cache and calendar cache
+      await _localDataSource.cacheTask(model);
+      await _calendarLocalDataSource.cacheCalendarTasks([model]);
+      return model.toEntity();
+    } on NetworkException catch (_) {
+      // Return cached version if available
+      final cached = await _localDataSource.getTask(id);
+      if (cached != null) return cached.toEntity();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<TaskEntity> skipTaskFromNotification(int id) async {
+    try {
+      final model = await _remoteDataSource.skipTaskFromNotification(id);
+      // Update both task cache and calendar cache
+      await _localDataSource.cacheTask(model);
+      await _calendarLocalDataSource.cacheCalendarTasks([model]);
+      return model.toEntity();
+    } on NetworkException catch (_) {
+      // Return cached version if available
+      final cached = await _localDataSource.getTask(id);
+      if (cached != null) return cached.toEntity();
+      rethrow;
+    }
+  }
 }

@@ -66,6 +66,26 @@ class FCMRemoteDataSource {
     }
   }
 
+  /// Send a test notification with action buttons from the backend.
+  ///
+  /// Useful for testing notifications with "Complete" and "Skip" buttons.
+  Future<void> sendTestNotificationWithActions({
+    String? title,
+    String? body,
+  }) async {
+    try {
+      await _apiClient.post(
+        ApiEndpoints.testNotificationWithActions,
+        data: {'title': title, 'body': body},
+        parser: (data) => data,
+      );
+    } catch (e) {
+      throw ServerException(
+        'Failed to send test notification with actions: $e',
+      );
+    }
+  }
+
   /// Check FCM service status on the backend.
   ///
   /// Returns status information about the notification service.
