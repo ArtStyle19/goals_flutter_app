@@ -25,8 +25,8 @@ abstract final class ApiEndpoints {
   static String task(int id) => '/tasks/$id';
   static String taskComplete(int id) => '/tasks/$id/complete';
   static String taskSkip(int id) => '/tasks/$id/skip';
-  static String taskLock(int id) => '/tasks/$id/lock';
-  static String taskUnlock(int id) => '/tasks/$id/unlock';
+  static String taskPostpone(int id) => '/tasks/$id/postpone';
+  static String taskRecover(int id) => '/tasks/$id/recover';
 
   // ─── Calendar ───────────────────────────────────────────
   static const String calendar = '/calendar';

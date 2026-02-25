@@ -86,30 +86,40 @@ class TaskRepositoryImpl implements TaskRepository {
   }
 
   @override
-  Future<TaskEntity> lockTask(int id) async {
-    try {
-      final model = await _remoteDataSource.lockTask(id);
-      await _localDataSource.cacheTask(model);
-      return model.toEntity();
-    } on NetworkException catch (_) {
-      // Return cached version if available
-      final cached = await _localDataSource.getTask(id);
-      if (cached != null) return cached.toEntity();
-      rethrow;
-    }
+  Future<TaskActionCascadeResult> postponeTask(int id, {String? reason}) async {
+    // Postpone triggers a cascade — no offline fallback (requires live backend).
+    final response = await _remoteDataSource.postponeTask(id, reason: reason);
+    // Update local cache with the returned task
+    await _localDataSource.cacheTask(response.task);
+    await _calendarLocalDataSource.cacheCalendarTasks([response.task]);
+
+    return TaskActionCascadeResult(
+      task: response.task.toEntity(),
+      message: response.message,
+      rescheduledCount: response.rescheduledCount,
+      orphanedCount: response.orphanedCount,
+      deadlineExtended: response.deadlineExtended,
+      newDeadline: response.newDeadline,
+      warning: response.warning,
+    );
   }
 
   @override
-  Future<TaskEntity> unlockTask(int id) async {
-    try {
-      final model = await _remoteDataSource.unlockTask(id);
-      await _localDataSource.cacheTask(model);
-      return model.toEntity();
-    } on NetworkException catch (_) {
-      // Return cached version if available
-      final cached = await _localDataSource.getTask(id);
-      if (cached != null) return cached.toEntity();
-      rethrow;
-    }
+  Future<TaskActionCascadeResult> recoverTask(int id) async {
+    // Recover triggers a cascade — no offline fallback (requires live backend).
+    final response = await _remoteDataSource.recoverTask(id);
+    // Update local cache with the returned task
+    await _localDataSource.cacheTask(response.task);
+    await _calendarLocalDataSource.cacheCalendarTasks([response.task]);
+
+    return TaskActionCascadeResult(
+      task: response.task.toEntity(),
+      message: response.message,
+      rescheduledCount: response.rescheduledCount,
+      orphanedCount: response.orphanedCount,
+      deadlineExtended: response.deadlineExtended,
+      newDeadline: response.newDeadline,
+      warning: response.warning,
+    );
   }
 }

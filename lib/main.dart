@@ -102,7 +102,7 @@ Future<void> _onNotificationComplete(int taskId) async {
   }
 }
 
-/// Called when a task action is triggered from FCM notification (Complete/Skip).
+/// Called when a task action is triggered from FCM notification (Complete/Skip/Postpone).
 ///
 /// This is the single entry point for all notification-triggered task actions.
 /// FCMService delegates here to keep itself decoupled from business logic.
@@ -114,7 +114,7 @@ void _onFCMTaskAction(int taskId, String action) async {
   dev.log('[Main] action: $action', name: 'fcm');
 
   // Execute the action via repository
-  if (action == 'complete' || action == 'skip') {
+  if (action == 'complete' || action == 'skip' || action == 'postpone') {
     dev.log('[Main] Executing action: $action', name: 'fcm');
     try {
       final repository = _container.read(taskRepositoryProvider);
@@ -125,9 +125,15 @@ void _onFCMTaskAction(int taskId, String action) async {
           notes: 'Completado desde notificación',
         );
         dev.log('[Main] ✅ Task $taskId completed successfully', name: 'fcm');
-      } else {
+      } else if (action == 'skip') {
         await repository.skipTask(taskId, reason: 'Omitido desde notificación');
         dev.log('[Main] ✅ Task $taskId skipped successfully', name: 'fcm');
+      } else {
+        await repository.postponeTask(
+          taskId,
+          reason: 'Pospuesto desde notificación',
+        );
+        dev.log('[Main] ✅ Task $taskId postponed successfully', name: 'fcm');
       }
 
       // Dismiss the ongoing local notification for this task

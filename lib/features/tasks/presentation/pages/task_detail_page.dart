@@ -9,6 +9,7 @@ import 'package:productivity/core/widgets/app_error_widget.dart';
 import 'package:productivity/core/widgets/confirmation_dialog.dart';
 import 'package:productivity/core/widgets/loading_widget.dart';
 import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
+import 'package:productivity/features/tasks/domain/repositories/task_repository.dart';
 import 'package:productivity/features/tasks/presentation/state/task_provider.dart';
 
 /// Full detail view and actions for a single task.
@@ -49,20 +50,13 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
             PopupMenuButton<String>(
               onSelected: (value) => _handleMenuAction(value, taskAsync.value!),
               itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: taskAsync.value!.isLocked ? 'unlock' : 'lock',
+                const PopupMenuItem(
+                  value: 'postpone',
                   child: Row(
                     children: [
-                      Icon(
-                        taskAsync.value!.isLocked
-                            ? Icons.lock_open
-                            : Icons.lock_outline,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        taskAsync.value!.isLocked ? 'Desbloquear' : 'Bloquear',
-                      ),
+                      Icon(Icons.schedule_send, size: 20),
+                      SizedBox(width: 12),
+                      Text('Posponer'),
                     ],
                   ),
                 ),
@@ -247,14 +241,46 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
                 const SizedBox(height: 24),
 
                 // ─── Action buttons ──────────────────
-                if (task.isPending)
+                if (task.isPending) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: () => _completeTask(task),
+                          icon: const Icon(Icons.check),
+                          label: const Text('Completar'),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            backgroundColor: AppColors.success,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () => _postponeTask(task),
+                          icon: const Icon(Icons.schedule_send),
+                          label: const Text('Posponer'),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(48),
+                            foregroundColor: AppColors.warning,
+                            side: const BorderSide(color: AppColors.warning),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+
+                // ─── Recover button (only for skipped tasks) ─
+                if (task.status == TaskStatus.skipped)
                   FilledButton.icon(
-                    onPressed: () => _completeTask(task),
-                    icon: const Icon(Icons.check),
-                    label: const Text('Completar Tarea'),
+                    onPressed: () => _recoverTask(task),
+                    icon: const Icon(Icons.restore),
+                    label: const Text('Recuperar Tarea'),
                     style: FilledButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
-                      backgroundColor: AppColors.success,
+                      backgroundColor: AppColors.info,
                     ),
                   ),
               ],
@@ -310,22 +336,8 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
   Future<void> _handleMenuAction(String action, TaskEntity task) async {
     try {
       switch (action) {
-        case 'lock':
-          await ref.read(taskActionsProvider.notifier).lockTask(task.id);
-          ref.invalidate(taskDetailProvider(widget.taskId));
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Tarea bloqueada')));
-          }
-        case 'unlock':
-          await ref.read(taskActionsProvider.notifier).unlockTask(task.id);
-          ref.invalidate(taskDetailProvider(widget.taskId));
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(const SnackBar(content: Text('Tarea desbloqueada')));
-          }
+        case 'postpone':
+          await _postponeTask(task);
         case 'skip':
           final confirmed = await showConfirmationDialog(
             context,
@@ -354,6 +366,93 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         );
       }
     }
+  }
+
+  Future<void> _postponeTask(TaskEntity task) async {
+    final confirmed = await showConfirmationDialog(
+      context,
+      title: 'Posponer tarea',
+      message:
+          '¿Posponer "${task.title}"?\n\nSe moverá al siguiente horario disponible y las tareas siguientes se ajustarán automáticamente.',
+      confirmLabel: 'Posponer',
+    );
+    if (!confirmed || !context.mounted) return;
+
+    try {
+      final result = await ref
+          .read(taskActionsProvider.notifier)
+          .postponeTask(task.id);
+
+      ref.invalidate(taskDetailProvider(widget.taskId));
+
+      if (mounted) {
+        final snackMessage = _buildCascadeMessage('pospuesta', result);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(snackMessage),
+            backgroundColor: result.warning != null ? AppColors.warning : null,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(userFriendlyMessage(e)),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _recoverTask(TaskEntity task) async {
+    final confirmed = await showConfirmationDialog(
+      context,
+      title: 'Recuperar tarea',
+      message:
+          '¿Recuperar "${task.title}"?\n\nSe reprogramará al siguiente horario disponible.',
+      confirmLabel: 'Recuperar',
+    );
+    if (!confirmed || !context.mounted) return;
+
+    try {
+      final result = await ref
+          .read(taskActionsProvider.notifier)
+          .recoverTask(task.id);
+
+      ref.invalidate(taskDetailProvider(widget.taskId));
+
+      if (mounted) {
+        final snackMessage = _buildCascadeMessage('recuperada', result);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(snackMessage),
+            backgroundColor: result.warning != null ? AppColors.warning : null,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(userFriendlyMessage(e)),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Builds a user-friendly message from a cascade result.
+  String _buildCascadeMessage(String action, TaskActionCascadeResult result) {
+    if (result.warning != null) {
+      return 'Tarea $action · ${result.warning}';
+    }
+    if (result.deadlineExtended) {
+      return 'Tarea $action · Fecha límite extendida a ${result.newDeadline}';
+    }
+    return 'Tarea $action · ${result.rescheduledCount} tarea(s) reubicada(s)';
   }
 
   Future<void> _saveNotes(TaskEntity task) async {

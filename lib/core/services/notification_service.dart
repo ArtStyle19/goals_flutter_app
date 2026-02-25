@@ -43,6 +43,9 @@ abstract final class NotificationActions {
 
   /// User tapped "Omitir" (FCM notifications only).
   static const skipTask = 'skip_task';
+
+  /// User tapped "Posponer" (FCM notifications only).
+  static const postponeTask = 'postpone_task';
 }
 
 /// Offset added to a task ID so that the *ongoing* notification uses a
@@ -244,7 +247,7 @@ class NotificationService {
             ),
           ],
         ),
-        // Category for FCM task notifications (Completar + Omitir).
+        // Category for FCM task notifications (Completar + Omitir + Posponer).
         DarwinNotificationCategory(
           'task_actions',
           actions: [
@@ -256,6 +259,11 @@ class NotificationService {
             DarwinNotificationAction.plain(
               NotificationActions.skipTask,
               'Omitir',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+            DarwinNotificationAction.plain(
+              NotificationActions.postponeTask,
+              'Posponer',
               options: {DarwinNotificationActionOption.foreground},
             ),
           ],
@@ -385,6 +393,12 @@ class NotificationService {
       if (response.actionId == NotificationActions.skipTask) {
         dev.log('[NotificationService] FCM action: SKIP');
         _onFCMAction?.call(payload.taskId, 'skip');
+        return;
+      }
+
+      if (response.actionId == NotificationActions.postponeTask) {
+        dev.log('[NotificationService] FCM action: POSTPONE');
+        _onFCMAction?.call(payload.taskId, 'postpone');
         return;
       }
 

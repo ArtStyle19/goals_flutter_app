@@ -69,7 +69,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           'fcm_task_actions',
           'Acciones de Tareas',
           description:
-              'Notificaciones con botones para completar u omitir tareas',
+              'Notificaciones con botones para completar, omitir o posponer tareas',
           importance: Importance.max,
           playSound: true,
           enableVibration: true,
@@ -98,6 +98,12 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         AndroidNotificationAction(
           'skip_task',
           'Omitir',
+          showsUserInterface: true,
+          cancelNotification: true,
+        ),
+        AndroidNotificationAction(
+          'postpone_task',
+          'Posponer',
           showsUserInterface: true,
           cancelNotification: true,
         ),
@@ -183,6 +189,7 @@ void _onBackgroundNotificationResponse(NotificationResponse response) async {
 abstract final class FCMNotificationActions {
   static const String completeTask = 'complete_task';
   static const String skipTask = 'skip_task';
+  static const String postponeTask = 'postpone_task';
   static const String openTask = 'open_task';
 }
 
@@ -195,7 +202,7 @@ abstract final class FCMNotificationActions {
 /// - Handle incoming messages (foreground, background, terminated)
 /// - Display local notifications when app is in foreground
 /// - Sync tokens with backend
-/// - Handle notification action buttons (Complete, Skip)
+/// - Handle notification action buttons (Complete, Skip, Postpone)
 class FCMService {
   FirebaseMessaging? _messaging;
   FCMRemoteDataSource? _remoteDataSource;
@@ -204,7 +211,7 @@ class FCMService {
   String? _currentToken;
 
   /// Callback for when a task action is triggered from notification.
-  /// The callback receives the taskId and action ('complete', 'skip', 'open').
+  /// The callback receives the taskId and action ('complete', 'skip', 'postpone', 'open').
   /// Business logic (API calls, state refresh, navigation) is handled by
   /// the callback owner (main.dart), keeping FCMService decoupled.
   Function(int taskId, String action)? onTaskAction;
@@ -478,8 +485,15 @@ class FCMService {
         await prefs.remove(_kPendingNotificationTaskId);
 
         // Execute the action
-        if (action == 'complete_task' || action == 'skip_task') {
-          final actionType = action == 'complete_task' ? 'complete' : 'skip';
+        if (action == 'complete_task' ||
+            action == 'skip_task' ||
+            action == 'postpone_task') {
+          final actionType = switch (action) {
+            'complete_task' => 'complete',
+            'skip_task' => 'skip',
+            'postpone_task' => 'postpone',
+            _ => 'open',
+          };
           await _handleTaskAction(taskId, actionType);
         } else {
           // Open action or unknown
@@ -498,7 +512,7 @@ class FCMService {
     return int.tryParse(taskIdStr.toString());
   }
 
-  /// Handle task action (complete or skip).
+  /// Handle task action (complete, skip, or postpone).
   ///
   /// Delegates execution to [onTaskAction] callback set in main.dart.
   /// The callback is responsible for calling the repository and refreshing UI.
@@ -567,7 +581,7 @@ class FCMService {
     if (taskId != null && action != null) {
       // This was an action button press
       dev.log('[FCM] Action button pressed: $action', name: 'fcm');
-      if (action == 'complete' || action == 'skip') {
+      if (action == 'complete' || action == 'skip' || action == 'postpone') {
         _handleTaskAction(taskId, action);
         return;
       }
@@ -625,6 +639,12 @@ class FCMService {
               const AndroidNotificationAction(
                 FCMNotificationActions.skipTask,
                 'Omitir',
+                showsUserInterface: true,
+                cancelNotification: true,
+              ),
+              const AndroidNotificationAction(
+                FCMNotificationActions.postponeTask,
+                'Posponer',
                 showsUserInterface: true,
                 cancelNotification: true,
               ),

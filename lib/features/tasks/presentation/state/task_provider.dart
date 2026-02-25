@@ -4,6 +4,7 @@ import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/features/calendar/presentation/state/calendar_provider.dart';
 import 'package:productivity/features/goals/presentation/state/goals_provider.dart';
 import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
+import 'package:productivity/features/tasks/domain/repositories/task_repository.dart';
 
 /// Provider for a single task detail.
 final taskDetailProvider = FutureProvider.family.autoDispose<TaskEntity, int>((
@@ -14,7 +15,7 @@ final taskDetailProvider = FutureProvider.family.autoDispose<TaskEntity, int>((
   return repository.getTask(taskId);
 });
 
-/// Provider for task actions (complete, skip, lock/unlock, update notes).
+/// Provider for task actions (complete, skip, postpone, recover, update notes).
 final taskActionsProvider = AsyncNotifierProvider<TaskActionsNotifier, void>(
   TaskActionsNotifier.new,
 );
@@ -46,26 +47,29 @@ class TaskActionsNotifier extends AsyncNotifier<void> {
     return task;
   }
 
-  /// Locks a task to prevent automatic rescheduling.
-  Future<TaskEntity> lockTask(int taskId) async {
+  /// Postpones a task to the next available slot, triggering a cascade.
+  Future<TaskActionCascadeResult> postponeTask(
+    int taskId, {
+    String? reason,
+  }) async {
     final repository = ref.read(taskRepositoryProvider);
-    final task = await repository.lockTask(taskId);
+    final result = await repository.postponeTask(taskId, reason: reason);
 
-    // Invalidate only the specific task detail
-    ref.invalidate(taskDetailProvider(taskId));
+    // Cascade changes multiple tasks — full invalidation needed
+    _invalidateTaskProviders(taskId, goalId: result.task.goalId);
 
-    return task;
+    return result;
   }
 
-  /// Unlocks a task.
-  Future<TaskEntity> unlockTask(int taskId) async {
+  /// Recovers a skipped task, triggering a cascade reschedule.
+  Future<TaskActionCascadeResult> recoverTask(int taskId) async {
     final repository = ref.read(taskRepositoryProvider);
-    final task = await repository.unlockTask(taskId);
+    final result = await repository.recoverTask(taskId);
 
-    // Invalidate only the specific task detail
-    ref.invalidate(taskDetailProvider(taskId));
+    // Cascade changes multiple tasks — full invalidation needed
+    _invalidateTaskProviders(taskId, goalId: result.task.goalId);
 
-    return task;
+    return result;
   }
 
   /// Updates task notes.
