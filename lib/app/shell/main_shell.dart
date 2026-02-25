@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:productivity/core/providers/connectivity_provider.dart';
+import 'package:productivity/core/widgets/confirmation_dialog.dart';
 
 /// Main scaffold with bottom navigation bar and swipeable content.
 ///
@@ -76,45 +78,66 @@ class _MainShellState extends ConsumerState<MainShell> {
     final isOffline = ref.watch(isOfflineProvider);
     final theme = Theme.of(context);
 
-    return Scaffold(
-      body: Column(
-        children: [
-          // Offline indicator banner
-          if (isOffline) const _OfflineBanner(),
-          
-          // Swipeable content area
-          Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: _onPageChanged,
-              physics: const ClampingScrollPhysics(), // Standard Android feel
-              children: widget.children,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final shouldExit = await showConfirmationDialog(
+          context,
+          title: '¿Salir de la app?',
+          message: '¿Estás seguro de que quieres salir de la aplicación?',
+          confirmLabel: 'Salir',
+          cancelLabel: 'Cancelar',
+          icon: Icons.exit_to_app_rounded,
+        );
+        if (shouldExit && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        body: Column(
+          children: [
+            // Offline indicator banner
+            if (isOffline) const _OfflineBanner(),
+
+            // Swipeable content area
+            Expanded(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: _onPageChanged,
+                physics: const ClampingScrollPhysics(),
+                children: widget.children,
+              ),
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: widget.navigationShell.currentIndex,
-        onDestinationSelected: _onDestinationSelected,
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.flag_outlined),
-            selectedIcon: Icon(Icons.flag, color: theme.colorScheme.primary),
-            label: 'Metas',
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.wb_sunny_outlined),
-            selectedIcon:
-                Icon(Icons.wb_sunny, color: theme.colorScheme.primary),
-            label: 'Hoy',
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.calendar_month_outlined),
-            selectedIcon:
-                Icon(Icons.calendar_month, color: theme.colorScheme.primary),
-            label: 'Calendario',
-          ),
-        ],
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: widget.navigationShell.currentIndex,
+          onDestinationSelected: _onDestinationSelected,
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.flag_outlined),
+              selectedIcon: Icon(Icons.flag, color: theme.colorScheme.primary),
+              label: 'Metas',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.wb_sunny_outlined),
+              selectedIcon: Icon(
+                Icons.wb_sunny,
+                color: theme.colorScheme.primary,
+              ),
+              label: 'Hoy',
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.calendar_month_outlined),
+              selectedIcon: Icon(
+                Icons.calendar_month,
+                color: theme.colorScheme.primary,
+              ),
+              label: 'Calendario',
+            ),
+          ],
+        ),
       ),
     );
   }
