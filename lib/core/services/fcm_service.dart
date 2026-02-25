@@ -6,17 +6,20 @@ import 'dart:typed_data';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:productivity/app/di/injection_container.dart';
-import 'package:productivity/app/router/app_router.dart';
 import 'package:productivity/core/services/fcm_remote_datasource.dart';
+import 'package:productivity/core/services/notification_service.dart';
 
 // NOTE: Provider is defined in injection_container.dart to avoid conflicts
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BACKGROUND HANDLER
 // ═══════════════════════════════════════════════════════════════════════════
+
+/// SharedPreferences key for pending notification actions.
+const _kPendingNotificationAction = 'pending_notification_action';
+const _kPendingNotificationTaskId = 'pending_notification_task_id';
 
 /// Handler for background messages.
 /// Must be a top-level function (not a method of a class).
@@ -28,28 +31,18 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   dev.log('[FCM] ╚══════════════════════════════════════════╝', name: 'fcm');
   dev.log('[FCM] Message ID: ${message.messageId}', name: 'fcm');
   dev.log('[FCM] Data: ${message.data}', name: 'fcm');
-  dev.log('[FCM] Notification: ${message.notification?.title}', name: 'fcm');
 
-  // Check if this is a hybrid message (notification + data) with action buttons
-  final hasNotification = message.notification != null;
+  // For data-only messages with action buttons, show local notification
   final hasData = message.data.isNotEmpty;
   final showActions = message.data['show_actions'] == 'true';
+  final title = message.data['title'] ?? 'Notificación';
+  final body = message.data['body'] ?? '';
 
-  // For hybrid messages with action buttons, we need to show a local notification
-  // with the action buttons because FCM doesn't support action buttons natively
-  if (hasNotification && hasData && showActions) {
+  if (hasData && showActions) {
     dev.log(
-      '[FCM] Hybrid message with actions detected - showing local notification',
+      '[FCM] Data-only message with actions - showing local notification',
       name: 'fcm',
     );
-
-    final title =
-        message.notification?.title ?? message.data['title'] ?? 'Notificación';
-    final body = message.notification?.body ?? message.data['body'] ?? '';
-
-    dev.log('[FCM] Title: $title', name: 'fcm');
-    dev.log('[FCM] Body: $body', name: 'fcm');
-    dev.log('[FCM] Show actions: $showActions', name: 'fcm');
 
     // Initialize local notifications plugin in background
     final localNotifications = FlutterLocalNotificationsPlugin();
@@ -61,12 +54,7 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
     await localNotifications.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: (response) {
-        dev.log(
-          '[FCM] Background notification response: ${response.actionId}',
-          name: 'fcm',
-        );
-      },
+      onDidReceiveNotificationResponse: _onBackgroundNotificationResponse,
     );
 
     // Create notification channel with actions
@@ -146,6 +134,47 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
+/// Handle notification response in background.
+/// Stores the action in SharedPreferences for processing when app opens.
+@pragma('vm:entry-point')
+void _onBackgroundNotificationResponse(NotificationResponse response) async {
+  dev.log(
+    '[FCM] Background notification response: action=${response.actionId}',
+    name: 'fcm',
+  );
+
+  if (response.payload == null || response.payload!.isEmpty) {
+    dev.log('[FCM] No payload in background response', name: 'fcm');
+    return;
+  }
+
+  try {
+    final data = jsonDecode(response.payload!) as Map<String, dynamic>;
+    final taskIdStr = data['task_id'] as String?;
+    final taskId = taskIdStr != null ? int.tryParse(taskIdStr) : null;
+
+    if (taskId == null) {
+      dev.log('[FCM] No taskId in background response', name: 'fcm');
+      return;
+    }
+
+    // Store action in SharedPreferences for processing when app opens
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _kPendingNotificationAction,
+      response.actionId ?? 'open',
+    );
+    await prefs.setInt(_kPendingNotificationTaskId, taskId);
+
+    dev.log(
+      '[FCM] Stored pending action: ${response.actionId} for task $taskId',
+      name: 'fcm',
+    );
+  } catch (e) {
+    dev.log('[FCM] Error storing background action: $e', name: 'fcm');
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // FCM SERVICE
 // ═══════════════════════════════════════════════════════════════════════════
@@ -169,15 +198,15 @@ abstract final class FCMNotificationActions {
 /// - Handle notification action buttons (Complete, Skip)
 class FCMService {
   FirebaseMessaging? _messaging;
-  final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
   FCMRemoteDataSource? _remoteDataSource;
-  ProviderContainer? _ref;
 
   bool _isInitialized = false;
   String? _currentToken;
 
   /// Callback for when a task action is triggered from notification.
+  /// The callback receives the taskId and action ('complete', 'skip', 'open').
+  /// Business logic (API calls, state refresh, navigation) is handled by
+  /// the callback owner (main.dart), keeping FCMService decoupled.
   Function(int taskId, String action)? onTaskAction;
 
   /// Get the messaging instance (only available after initialization)
@@ -194,12 +223,6 @@ class FCMService {
   /// Must be called before [initialize] if backend sync is needed.
   void setRemoteDataSource(FCMRemoteDataSource dataSource) {
     _remoteDataSource = dataSource;
-  }
-
-  /// Set the Riverpod container for accessing repositories.
-  /// Required for handling task actions from notifications.
-  void setRef(ProviderContainer ref) {
-    _ref = ref;
   }
 
   /// Initialize Firebase and FCM.
@@ -287,34 +310,49 @@ class FCMService {
   // ─── Token Management ────────────────────────────────────────────────────
 
   /// Get current FCM token.
+  ///
+  /// Re-fetches from Firebase if no token is cached locally.
   Future<String?> getToken() async {
     if (!_isInitialized) {
       throw StateError('FCMService not initialized. Call initialize() first.');
     }
+    // Re-fetch if missing (e.g. after logout deleted it)
+    _currentToken ??= await _messagingInstance.getToken();
     return _currentToken;
   }
 
-  /// Manually register the current token with the backend.
-  /// Useful for retrying failed registrations or forcing re-registration.
+  /// Register the current FCM token with the backend.
+  ///
+  /// If no token is cached locally (e.g. after logout deleted it),
+  /// a fresh token is obtained from Firebase first.
+  /// Returns `true` on success, `false` if registration was skipped.
   Future<bool> registerTokenWithBackend() async {
     if (!_isInitialized) {
       throw StateError('FCMService not initialized. Call initialize() first.');
-    }
-    if (_currentToken == null) {
-      dev.log('[FCM] No token available to register', name: 'fcm');
-      return false;
     }
     if (_remoteDataSource == null) {
       dev.log('[FCM] No remote data source available', name: 'fcm');
       return false;
     }
 
+    // Re-fetch token from Firebase if we don't have one cached
+    // (happens after logout → deleteToken clears _currentToken)
+    if (_currentToken == null) {
+      dev.log('[FCM] No cached token — requesting fresh token', name: 'fcm');
+      _currentToken = await _messagingInstance.getToken();
+    }
+
+    if (_currentToken == null) {
+      dev.log('[FCM] Firebase returned null token', name: 'fcm');
+      return false;
+    }
+
     try {
       await _remoteDataSource!.registerToken(_currentToken!);
-      dev.log('[FCM] Token manually registered with backend', name: 'fcm');
+      dev.log('[FCM] Token registered with backend ✅', name: 'fcm');
       return true;
     } catch (e) {
-      dev.log('[FCM] Manual token registration failed: $e', name: 'fcm');
+      dev.log('[FCM] Token registration failed: $e', name: 'fcm');
       return false;
     }
   }
@@ -372,52 +410,20 @@ class FCMService {
 
   // ─── Local Notifications (for foreground) ────────────────────────────────
 
-  /// Initialize local notifications plugin.
+  /// Creates the FCM-specific notification channels on Android.
+  ///
+  /// **Important:** This does NOT call `_plugin.initialize()` —
+  /// [NotificationService.initialize()] handles that once, and its
+  /// `_handleResponse` handler routes both local and FCM actions.
+  /// We only use [NotificationService.plugin] to *show* notifications.
   Future<void> _initializeLocalNotifications() async {
-    const androidSettings = AndroidInitializationSettings(
-      '@mipmap/ic_launcher',
-    );
-
-    // iOS settings with action categories
-    final iosSettings = DarwinInitializationSettings(
-      notificationCategories: [
-        DarwinNotificationCategory(
-          'task_actions',
-          actions: [
-            DarwinNotificationAction.plain(
-              FCMNotificationActions.completeTask,
-              'Completar',
-              options: {DarwinNotificationActionOption.foreground},
-            ),
-            DarwinNotificationAction.plain(
-              FCMNotificationActions.skipTask,
-              'Omitir',
-              options: {DarwinNotificationActionOption.foreground},
-            ),
-          ],
-        ),
-      ],
-    );
-
-    final initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _localNotifications.initialize(
-      initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-      onDidReceiveBackgroundNotificationResponse:
-          _onBackgroundNotificationTapped,
-    );
-
     // Create notification channels for Android
     await _createNotificationChannels();
   }
 
   /// Create all required notification channels for Android.
   Future<void> _createNotificationChannels() async {
-    final androidPlugin = _localNotifications
+    final androidPlugin = NotificationService.plugin
         .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin
         >();
@@ -453,79 +459,35 @@ class FCMService {
     dev.log('[FCM] Notification channels created', name: 'fcm');
   }
 
-  /// Handle notification tap (foreground).
-  void _onNotificationTapped(NotificationResponse response) {
-    dev.log('[FCM] ═══════════════════════════════════════════', name: 'fcm');
-    dev.log('[FCM] NOTIFICATION TAPPED', name: 'fcm');
-    dev.log('[FCM] Action ID: ${response.actionId}', name: 'fcm');
-    dev.log('[FCM] Payload: ${response.payload}', name: 'fcm');
-    dev.log('[FCM] Notification ID: ${response.id}', name: 'fcm');
-    dev.log('[FCM] ═══════════════════════════════════════════', name: 'fcm');
-
-    // Handle the case where payload might be null but we have notification ID
-    // This can happen with FCM notifications shown by the system
-    if (response.payload == null || response.payload!.isEmpty) {
-      dev.log(
-        '[FCM] WARNING: Empty payload, trying to extract from notification ID',
-        name: 'fcm',
-      );
-      // Try to get data from a stored map if we have it
-      // For now, we can't do much without payload data
-      dev.log(
-        '[FCM] ERROR: Cannot process notification without payload data',
-        name: 'fcm',
-      );
-      return;
-    }
-
-    final data = _parsePayload(response.payload);
-    if (data == null) {
-      dev.log('[FCM] ERROR: Failed to parse payload', name: 'fcm');
-      return;
-    }
-    dev.log('[FCM] Parsed data: $data', name: 'fcm');
-
-    final taskId = _extractTaskId(data);
-    if (taskId == null) {
-      dev.log('[FCM] ERROR: Could not extract taskId from data', name: 'fcm');
-      return;
-    }
-    dev.log('[FCM] Extracted taskId: $taskId', name: 'fcm');
-
-    // Handle action buttons
-    if (response.actionId == FCMNotificationActions.completeTask) {
-      dev.log('[FCM] Action: COMPLETE TASK', name: 'fcm');
-      _handleTaskAction(taskId, 'complete');
-    } else if (response.actionId == FCMNotificationActions.skipTask) {
-      dev.log('[FCM] Action: SKIP TASK', name: 'fcm');
-      _handleTaskAction(taskId, 'skip');
-    } else if (response.actionId == null) {
-      dev.log('[FCM] Action: OPEN TASK (body tap)', name: 'fcm');
-      onTaskAction?.call(taskId, 'open');
-    } else {
-      dev.log('[FCM] Action: UNKNOWN (${response.actionId})', name: 'fcm');
-      onTaskAction?.call(taskId, 'open');
-    }
-  }
-
-  /// Handle notification tap in background (static required by plugin).
-  @pragma('vm:entry-point')
-  static void _onBackgroundNotificationTapped(NotificationResponse response) {
-    dev.log(
-      '[FCM] Background notification tapped: action=${response.actionId}',
-      name: 'fcm',
-    );
-    // Background actions are limited - app will open and foreground handler takes over
-  }
-
-  /// Parse notification payload from JSON string.
-  Map<String, dynamic>? _parsePayload(String? payload) {
-    if (payload == null || payload.isEmpty) return null;
+  /// Process any pending notification actions stored in background.
+  /// Call this when app starts to handle actions from terminated state.
+  Future<void> processPendingActions() async {
     try {
-      return jsonDecode(payload) as Map<String, dynamic>;
+      final prefs = await SharedPreferences.getInstance();
+      final action = prefs.getString(_kPendingNotificationAction);
+      final taskId = prefs.getInt(_kPendingNotificationTaskId);
+
+      if (action != null && taskId != null) {
+        dev.log(
+          '[FCM] Processing pending action: $action for task $taskId',
+          name: 'fcm',
+        );
+
+        // Clear pending action first to prevent re-processing
+        await prefs.remove(_kPendingNotificationAction);
+        await prefs.remove(_kPendingNotificationTaskId);
+
+        // Execute the action
+        if (action == 'complete_task' || action == 'skip_task') {
+          final actionType = action == 'complete_task' ? 'complete' : 'skip';
+          await _handleTaskAction(taskId, actionType);
+        } else {
+          // Open action or unknown
+          onTaskAction?.call(taskId, 'open');
+        }
+      }
     } catch (e) {
-      dev.log('[FCM] Failed to parse payload: $e', name: 'fcm');
-      return null;
+      dev.log('[FCM] Error processing pending actions: $e', name: 'fcm');
     }
   }
 
@@ -537,62 +499,23 @@ class FCMService {
   }
 
   /// Handle task action (complete or skip).
+  ///
+  /// Delegates execution to [onTaskAction] callback set in main.dart.
+  /// The callback is responsible for calling the repository and refreshing UI.
+  /// This keeps FCMService decoupled from business logic.
   Future<void> _handleTaskAction(int taskId, String action) async {
     dev.log('[FCM] ╔══════════════════════════════════════════╗', name: 'fcm');
     dev.log('[FCM] ║  HANDLE TASK ACTION                      ║', name: 'fcm');
     dev.log('[FCM] ╚══════════════════════════════════════════╝', name: 'fcm');
     dev.log('[FCM] taskId: $taskId', name: 'fcm');
     dev.log('[FCM] action: $action', name: 'fcm');
-    dev.log('[FCM] _ref available: ${_ref != null}', name: 'fcm');
-    dev.log(
-      '[FCM] onTaskAction callback set: ${onTaskAction != null}',
-      name: 'fcm',
-    );
 
-    // Execute via repository first if ref is available
-    if (_ref != null) {
-      try {
-        dev.log('[FCM] Reading taskRepository...', name: 'fcm');
-        final taskRepository = _ref!.read(taskRepositoryProvider);
-        dev.log('[FCM] Repository obtained successfully', name: 'fcm');
-
-        if (action == 'complete') {
-          dev.log(
-            '[FCM] Calling completeTaskFromNotification($taskId)...',
-            name: 'fcm',
-          );
-          await taskRepository.completeTaskFromNotification(taskId);
-          dev.log(
-            '[FCM] ✅ Task $taskId COMPLETED successfully via notification',
-            name: 'fcm',
-          );
-        } else if (action == 'skip') {
-          dev.log(
-            '[FCM] Calling skipTaskFromNotification($taskId)...',
-            name: 'fcm',
-          );
-          await taskRepository.skipTaskFromNotification(taskId);
-          dev.log(
-            '[FCM] ✅ Task $taskId SKIPPED successfully via notification',
-            name: 'fcm',
-          );
-        }
-      } catch (e, stackTrace) {
-        dev.log(
-          '[FCM] ❌ FAILED to execute task action via repository: $e',
-          name: 'fcm',
-        );
-        dev.log('[FCM] Stack trace: $stackTrace', name: 'fcm');
-        // Don't return - still try to call the callback for UI updates
-      }
+    if (onTaskAction != null) {
+      dev.log('[FCM] Delegating to onTaskAction callback...', name: 'fcm');
+      onTaskAction!(taskId, action);
     } else {
-      dev.log('[FCM] ⚠️ No ref available, using callback only', name: 'fcm');
+      dev.log('[FCM] ⚠️ No onTaskAction callback registered', name: 'fcm');
     }
-
-    // Call the callback for UI navigation/refresh
-    dev.log('[FCM] Calling onTaskAction callback...', name: 'fcm');
-    onTaskAction?.call(taskId, action);
-    dev.log('[FCM] onTaskAction callback completed', name: 'fcm');
   }
 
   // ─── Message Handlers ────────────────────────────────────────────────────
@@ -651,31 +574,9 @@ class FCMService {
     }
 
     // Handle deep link routing from FCM payload
-    final route = message.data['route'] as String?;
-
-    if (route != null && _ref != null) {
-      _navigateToRoute(route, taskId);
-    } else if (taskId != null) {
-      // Fallback: navigate to task detail if task_id is present
+    if (taskId != null) {
+      // Delegate navigation to the callback (open action)
       onTaskAction?.call(taskId, 'open');
-    }
-  }
-
-  /// Navigate to a specific route using the router.
-  void _navigateToRoute(String route, int? taskId) {
-    try {
-      final router = _ref!.read(routerProvider);
-      String path = route;
-
-      // Replace route parameters if taskId is available
-      if (taskId != null && route.contains(':id')) {
-        path = route.replaceFirst(':id', '$taskId');
-      }
-
-      dev.log('[FCM] Navigating to: $path', name: 'fcm');
-      router.push(path);
-    } catch (e) {
-      dev.log('[FCM] Failed to navigate: $e', name: 'fcm');
     }
   }
 
@@ -753,7 +654,7 @@ class FCMService {
       }
     }
 
-    await _localNotifications.show(
+    await NotificationService.plugin.show(
       notificationId,
       title,
       body,

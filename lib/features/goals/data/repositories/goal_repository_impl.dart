@@ -1,4 +1,3 @@
-import 'package:productivity/core/error/exceptions.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/features/goals/data/datasources/goal_local_datasource.dart';
 import 'package:productivity/features/goals/data/datasources/goal_remote_datasource.dart';
@@ -33,13 +32,7 @@ class GoalRepositoryImpl implements GoalRepository {
 
   @override
   Future<List<GoalEntity>> getGoals() async {
-    // Try cache first for immediate response (offline-first)
-    final cached = await _localDataSource.getAllGoals();
-    if (cached.isNotEmpty) {
-      return cached.map((m) => m.toEntity()).toList();
-    }
-
-    // Cache miss - fetch from remote and cache
+    // Always try remote first to get fresh data
     try {
       final models = await _remoteDataSource.getGoals();
       // Cache all goals
@@ -51,21 +44,19 @@ class GoalRepositoryImpl implements GoalRepository {
         }
       }
       return models.map((m) => m.toEntity()).toList();
-    } on NetworkException catch (_) {
-      // No cache available and network failed
+    } catch (_) {
+      // Network error — fall back to cache for offline access
+      final cached = await _localDataSource.getAllGoals();
+      if (cached.isNotEmpty) {
+        return cached.map((m) => m.toEntity()).toList();
+      }
       rethrow;
     }
   }
 
   @override
   Future<GoalEntity> getGoal(int id) async {
-    // Try cache first for immediate response (offline-first)
-    final cached = await _localDataSource.getGoal(id);
-    if (cached != null) {
-      return cached.toEntity();
-    }
-
-    // Cache miss - fetch from remote and cache
+    // Always try remote first to get fresh data (with tasks)
     try {
       final model = await _remoteDataSource.getGoal(id);
       // Cache the goal
@@ -75,8 +66,12 @@ class GoalRepositoryImpl implements GoalRepository {
         await _taskLocalDataSource.cacheTasks(model.tasks!);
       }
       return model.toEntity();
-    } on NetworkException catch (_) {
-      // No cache available and network failed
+    } catch (_) {
+      // Network error — fall back to cache for offline access
+      final cached = await _localDataSource.getGoal(id);
+      if (cached != null) {
+        return cached.toEntity();
+      }
       rethrow;
     }
   }

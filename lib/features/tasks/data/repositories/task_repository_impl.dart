@@ -24,19 +24,17 @@ class TaskRepositoryImpl implements TaskRepository {
 
   @override
   Future<TaskEntity> getTask(int id) async {
-    // Try cache first
-    final cached = await _localDataSource.getTask(id);
-    if (cached != null) {
-      return cached.toEntity();
-    }
-
-    // Fetch from remote and cache
+    // Always try remote first to get fresh data
     try {
       final model = await _remoteDataSource.getTask(id);
       await _localDataSource.cacheTask(model);
       return model.toEntity();
-    } on NetworkException catch (_) {
-      // No cache available and network failed
+    } catch (_) {
+      // Network error — fall back to cache for offline access
+      final cached = await _localDataSource.getTask(id);
+      if (cached != null) {
+        return cached.toEntity();
+      }
       rethrow;
     }
   }
@@ -106,38 +104,6 @@ class TaskRepositoryImpl implements TaskRepository {
     try {
       final model = await _remoteDataSource.unlockTask(id);
       await _localDataSource.cacheTask(model);
-      return model.toEntity();
-    } on NetworkException catch (_) {
-      // Return cached version if available
-      final cached = await _localDataSource.getTask(id);
-      if (cached != null) return cached.toEntity();
-      rethrow;
-    }
-  }
-
-  @override
-  Future<TaskEntity> completeTaskFromNotification(int id) async {
-    try {
-      final model = await _remoteDataSource.completeTaskFromNotification(id);
-      // Update both task cache and calendar cache
-      await _localDataSource.cacheTask(model);
-      await _calendarLocalDataSource.cacheCalendarTasks([model]);
-      return model.toEntity();
-    } on NetworkException catch (_) {
-      // Return cached version if available
-      final cached = await _localDataSource.getTask(id);
-      if (cached != null) return cached.toEntity();
-      rethrow;
-    }
-  }
-
-  @override
-  Future<TaskEntity> skipTaskFromNotification(int id) async {
-    try {
-      final model = await _remoteDataSource.skipTaskFromNotification(id);
-      // Update both task cache and calendar cache
-      await _localDataSource.cacheTask(model);
-      await _calendarLocalDataSource.cacheCalendarTasks([model]);
       return model.toEntity();
     } on NetworkException catch (_) {
       // Return cached version if available

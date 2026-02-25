@@ -10,12 +10,6 @@ abstract class TaskRemoteDataSource {
   Future<TaskModel> skipTask(int id, {String? reason});
   Future<TaskModel> lockTask(int id);
   Future<TaskModel> unlockTask(int id);
-
-  /// Complete task from FCM notification action button.
-  Future<TaskModel> completeTaskFromNotification(int id);
-
-  /// Skip task from FCM notification action button.
-  Future<TaskModel> skipTaskFromNotification(int id);
 }
 
 /// Implementation of [TaskRemoteDataSource].
@@ -86,28 +80,6 @@ class TaskRemoteDataSourceImpl implements TaskRemoteDataSource {
   Future<TaskModel> unlockTask(int id) {
     return _apiClient.post(
       ApiEndpoints.taskUnlock(id),
-      parser: (data) {
-        final json = data as Map<String, dynamic>;
-        return TaskModel.fromJson(json['task'] as Map<String, dynamic>);
-      },
-    );
-  }
-
-  @override
-  Future<TaskModel> completeTaskFromNotification(int id) {
-    return _apiClient.post(
-      ApiEndpoints.taskCompleteFromNotification(id),
-      parser: (data) {
-        final json = data as Map<String, dynamic>;
-        return TaskModel.fromJson(json['task'] as Map<String, dynamic>);
-      },
-    );
-  }
-
-  @override
-  Future<TaskModel> skipTaskFromNotification(int id) {
-    return _apiClient.post(
-      ApiEndpoints.taskSkipFromNotification(id),
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return TaskModel.fromJson(json['task'] as Map<String, dynamic>);

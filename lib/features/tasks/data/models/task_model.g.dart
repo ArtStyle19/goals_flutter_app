@@ -13,10 +13,12 @@ TaskModel _$TaskModelFromJson(Map<String, dynamic> json) => TaskModel(
   title: safeString(json['title']),
   description: safeStringNullable(json['description']),
   order: json['order'] == null ? 0 : safeInt(json['order']),
-  scheduledAt: safeString(json['scheduled_at']),
+  scheduledAt: json['scheduled_at'] == null
+      ? ''
+      : safeString(json['scheduled_at']),
   endAt: safeStringNullable(json['end_at']),
   durationMinutes: safeIntNullable(json['duration_minutes']),
-  status: safeString(json['status']),
+  status: json['status'] == null ? 'scheduled' : safeString(json['status']),
   isLocked: json['is_locked'] == null ? false : safeBool(json['is_locked']),
   notes: safeStringNullable(json['notes']),
   completedAt: safeStringNullable(json['completed_at']),

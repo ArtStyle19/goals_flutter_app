@@ -3,8 +3,6 @@
 /// Provides real-time network status and offline mode detection.
 library;
 
-import 'dart:async';
-
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -71,14 +69,5 @@ class ConnectivityStatus {
     if (isOnline) return 'online';
     if (isOffline) return 'offline';
     return 'unknown';
-  }
-}
-
-/// Mixin for notifiers that need connectivity awareness.
-mixin ConnectivityAware {
-  /// Checks if device is currently online.
-  Future<bool> get isOnline async {
-    final results = await Connectivity().checkConnectivity();
-    return results.any((result) => result != ConnectivityResult.none);
   }
 }

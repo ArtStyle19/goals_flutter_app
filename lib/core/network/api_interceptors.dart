@@ -1,6 +1,7 @@
-/// Dio interceptors for authentication, timezone, and logging.
+/// Dio interceptors for authentication, timezone, connectivity, and logging.
 library;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -24,6 +25,44 @@ class AuthInterceptor extends Interceptor {
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
+    handler.next(options);
+  }
+}
+
+/// Rejects requests immediately when the device has no network connection.
+///
+/// Must be added as the **first** interceptor in the Dio pipeline so it
+/// short-circuits before the request hits the socket layer (which would
+/// block until [connectTimeout] expires — typically seconds of dead wait).
+///
+/// When connectivity returns [ConnectivityResult.none], the interceptor
+/// produces a [DioException] of type [DioExceptionType.connectionError],
+/// which [ApiClient._handleDioError] already maps to [NetworkException].
+/// Repositories then fall back to cached data immediately.
+class ConnectivityInterceptor extends Interceptor {
+  final Connectivity _connectivity;
+
+  ConnectivityInterceptor([Connectivity? connectivity])
+    : _connectivity = connectivity ?? Connectivity();
+
+  @override
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    final results = await _connectivity.checkConnectivity();
+    final hasConnection = results.any((r) => r != ConnectivityResult.none);
+
+    if (!hasConnection) {
+      return handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+          message: 'Sin conexión a internet.',
+        ),
+      );
+    }
+
     handler.next(options);
   }
 }

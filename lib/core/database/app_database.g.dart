@@ -1826,6 +1826,7 @@ class AvailabilityRuleDbModel extends DataClass
   final int localId;
 
   /// Foreign key to the goal this rule belongs to.
+  /// Indexed for fast lookups when fetching rules for a specific goal.
   final int goalId;
 
   /// Day of week (e.g., "monday", "tuesday").

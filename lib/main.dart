@@ -12,10 +12,7 @@ import 'package:productivity/app/router/app_router.dart';
 import 'package:productivity/app/router/routes.dart';
 import 'package:productivity/core/network/api_interceptors.dart';
 import 'package:productivity/core/services/notification_service.dart';
-import 'package:productivity/core/services/fcm_service.dart';
-import 'package:productivity/core/services/fcm_remote_datasource.dart';
 import 'package:productivity/features/calendar/presentation/state/calendar_provider.dart';
-import 'package:productivity/features/tasks/domain/repositories/task_repository.dart';
 import 'package:productivity/features/tasks/presentation/state/task_provider.dart';
 
 /// Global [ProviderContainer] so notification callbacks (which run outside
@@ -47,20 +44,28 @@ Future<void> main() async {
     ],
   );
 
-  // Initialize Firebase Cloud Messaging (FCM) with backend sync.
-  final fcmService = _container.read(fcmServiceProvider);
-  final fcmRemoteDataSource = _container.read(fcmRemoteDataSourceProvider);
-  fcmService.setRemoteDataSource(fcmRemoteDataSource);
-  fcmService.setRef(_container); // Set ref for task actions
-  fcmService.onTaskAction = _onFCMTaskAction; // Set callback for FCM actions
-  await fcmService.initialize();
-
-  // Initialize local notifications for ongoing task notifications.
+  // Initialize local notifications FIRST — this registers the single
+  // response handler for both local and FCM notifications (the plugin
+  // is a singleton so only the last `initialize()` call's handler wins).
   await NotificationService.initialize(
     ianaTimezone: timezoneInterceptor.currentTimezone,
     onTap: _onNotificationTap,
     onComplete: _onNotificationComplete,
+    onFCMAction: _onFCMTaskAction,
   );
+
+  // Initialize Firebase Cloud Messaging (FCM) with backend sync.
+  // Must run AFTER NotificationService.initialize() so the plugin is
+  // ready and channels can be created.
+  final fcmService = _container.read(fcmServiceProvider);
+  final fcmRemoteDataSource = _container.read(fcmRemoteDataSourceProvider);
+  fcmService.setRemoteDataSource(fcmRemoteDataSource);
+  fcmService.onTaskAction = _onFCMTaskAction;
+  await fcmService.initialize();
+
+  // Process any pending notification actions from background/terminated state.
+  // This handles actions that were triggered when the app was not running.
+  await fcmService.processPendingActions();
 
   runApp(
     UncontrolledProviderScope(
@@ -98,6 +103,9 @@ Future<void> _onNotificationComplete(int taskId) async {
 }
 
 /// Called when a task action is triggered from FCM notification (Complete/Skip).
+///
+/// This is the single entry point for all notification-triggered task actions.
+/// FCMService delegates here to keep itself decoupled from business logic.
 void _onFCMTaskAction(int taskId, String action) async {
   dev.log('[Main] ╔══════════════════════════════════════════╗', name: 'fcm');
   dev.log('[Main] ║  _onFCMTaskAction CALLED                 ║', name: 'fcm');
@@ -105,35 +113,28 @@ void _onFCMTaskAction(int taskId, String action) async {
   dev.log('[Main] taskId: $taskId', name: 'fcm');
   dev.log('[Main] action: $action', name: 'fcm');
 
-  final router = _container.read(routerProvider);
-  dev.log('[Main] Router obtained', name: 'fcm');
-
-  // Execute the action first (before navigation)
+  // Execute the action via repository
   if (action == 'complete' || action == 'skip') {
     dev.log('[Main] Executing action: $action', name: 'fcm');
     try {
-      dev.log('[Main] Reading taskRepositoryProvider...', name: 'fcm');
       final repository = _container.read(taskRepositoryProvider);
-      dev.log('[Main] Repository obtained successfully', name: 'fcm');
 
       if (action == 'complete') {
-        dev.log(
-          '[Main] Calling completeTaskFromNotification($taskId)...',
-          name: 'fcm',
+        await repository.completeTask(
+          taskId,
+          notes: 'Completado desde notificación',
         );
-        await repository.completeTaskFromNotification(taskId);
         dev.log('[Main] ✅ Task $taskId completed successfully', name: 'fcm');
-      } else if (action == 'skip') {
-        dev.log(
-          '[Main] Calling skipTaskFromNotification($taskId)...',
-          name: 'fcm',
-        );
-        await repository.skipTaskFromNotification(taskId);
+      } else {
+        await repository.skipTask(taskId, reason: 'Omitido desde notificación');
         dev.log('[Main] ✅ Task $taskId skipped successfully', name: 'fcm');
       }
 
+      // Dismiss the ongoing local notification for this task
+      final service = _container.read(notificationServiceProvider);
+      await service.dismissOngoingTask(taskId);
+
       // Refresh providers to show updated state
-      dev.log('[Main] Refreshing providers...', name: 'fcm');
       _container.invalidate(todayProvider);
       _container.invalidate(nextTaskProvider);
       _container.invalidate(taskDetailProvider(taskId));
@@ -142,17 +143,11 @@ void _onFCMTaskAction(int taskId, String action) async {
       dev.log('[Main] ❌ Failed to execute task action: $e', name: 'fcm');
       dev.log('[Main] Stack trace: $stackTrace', name: 'fcm');
     }
-  } else {
-    dev.log(
-      '[Main] Action is not complete/skip, skipping execution',
-      name: 'fcm',
-    );
   }
 
-  // Navigate to task detail for all actions
-  dev.log('[Main] Navigating to task detail...', name: 'fcm');
+  // Navigate to task detail
+  final router = _container.read(routerProvider);
   final path = AppRoutes.taskDetail.replaceFirst(':id', '$taskId');
-  dev.log('[Main] Path: $path', name: 'fcm');
+  dev.log('[Main] Navigating to: $path', name: 'fcm');
   router.push(path);
-  dev.log('[Main] ✅ Navigation completed', name: 'fcm');
 }

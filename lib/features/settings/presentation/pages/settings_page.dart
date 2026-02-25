@@ -9,7 +9,6 @@ import 'package:productivity/core/error/error_handler.dart';
 import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/core/services/notification_scheduler.dart';
 import 'package:productivity/core/services/notification_service.dart';
-import 'package:productivity/core/services/fcm_service.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/core/widgets/confirmation_dialog.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
@@ -602,7 +601,6 @@ class _FCMTestSection extends ConsumerStatefulWidget {
 class _FCMTestSectionState extends ConsumerState<_FCMTestSection> {
   bool _isLoading = false;
   String? _fcmToken;
-  Map<String, dynamic>? _backendStatus;
 
   @override
   void initState() {
@@ -700,7 +698,6 @@ class _FCMTestSectionState extends ConsumerState<_FCMTestSection> {
       final status = await fcmService.getBackendStatus();
 
       if (mounted) {
-        setState(() => _backendStatus = status);
         _showStatusDialog(status);
       }
     } catch (e) {
@@ -731,11 +728,24 @@ class _FCMTestSectionState extends ConsumerState<_FCMTestSection> {
                 'FCM Configurado',
                 status['fcm_configured'] == true,
               ),
-              _buildStatusRow('Token Registrado', status['has_token'] == true),
+              _buildStatusRow(
+                'Credenciales Firebase',
+                status['credentials_exist'] == true,
+              ),
               _buildStatusRow(
                 'Usuario Autenticado',
                 status['authenticated'] == true,
               ),
+              _buildStatusRow('Token Registrado', status['has_token'] == true),
+              if (status['token_preview'] != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Token: ${status['token_preview']}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                ),
+              ],
               if (status['error'] != null) ...[
                 const SizedBox(height: 8),
                 Text(

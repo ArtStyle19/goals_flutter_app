@@ -28,12 +28,6 @@ abstract final class ApiEndpoints {
   static String taskLock(int id) => '/tasks/$id/lock';
   static String taskUnlock(int id) => '/tasks/$id/unlock';
 
-  // Task actions from FCM notification buttons
-  static String taskCompleteFromNotification(int id) =>
-      '/tasks/$id/complete-from-notification';
-  static String taskSkipFromNotification(int id) =>
-      '/tasks/$id/skip-from-notification';
-
   // ─── Calendar ───────────────────────────────────────────
   static const String calendar = '/calendar';
   static const String today = '/today';

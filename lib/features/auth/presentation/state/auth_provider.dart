@@ -3,6 +3,8 @@
 /// Provides a unified async state for auth operations with Riverpod.
 library;
 
+import 'dart:developer' as dev;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,24 +45,71 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
       return null;
     }
 
+    // ── Fast path: return cached user immediately ──
+    // If a cached user exists, return it right away so the app is usable
+    // without waiting for the network. Then refresh from server in the
+    // background to keep user data and FCM token up-to-date.
+    final localDataSource = ref.read(authLocalDataSourceProvider);
+    final cachedUser = await localDataSource.getCachedUser();
+
+    if (cachedUser != null) {
+      // Schedule a background refresh — does NOT block the UI
+      _refreshFromServer();
+      return cachedUser.toEntity();
+    }
+
+    // No cached user — must wait for the network (first launch after login
+    // from a different device, or corrupted cache)
     try {
-      // Try to get current user from server
-      return await _repository.getMe();
+      final user = await _repository.getMe();
+      await _registerFCMToken();
+      return user;
     } on UnauthorizedException catch (_) {
-      // Token expired or invalid - clear it
       await _repository.logout();
       return null;
-    } catch (_) {
-      // Network error or other issue - check local cache for offline access
-      final localDataSource = ref.read(authLocalDataSourceProvider);
-      final cachedUser = await localDataSource.getCachedUser();
-      if (cachedUser != null) {
-        // Return cached user for offline access
-        return cachedUser.toEntity();
+    }
+    // Any other error (network) propagates as AsyncError — the UI can
+    // show a retry button on the splash screen.
+  }
+
+  /// Silently refreshes user data from the server.
+  ///
+  /// Called after returning a cached user so the app opens instantly
+  /// while keeping data fresh. On [UnauthorizedException] the user is
+  /// logged out; all other errors are silently ignored (the cached data
+  /// is still valid).
+  Future<void> _refreshFromServer() async {
+    try {
+      final user = await _repository.getMe();
+      await _registerFCMToken();
+      // Update state only if still authenticated (avoid race with logout)
+      if (state.valueOrNull != null) {
+        state = AsyncData(user);
       }
-      // No cached user but has token - create minimal offline user
-      // This ensures user stays logged in for offline functionality
-      return null;
+    } on UnauthorizedException catch (_) {
+      // Token was revoked server-side — force logout
+      await logout();
+    } catch (e) {
+      // Network error — cached user is still valid, nothing to do
+      dev.log('[Auth] Background refresh failed: $e', name: 'auth');
+    }
+  }
+
+  /// Registers the current FCM token with the backend.
+  ///
+  /// Called after successful authentication (login, register, or session
+  /// restore) to ensure push notifications are delivered to the correct
+  /// device. Errors are caught and logged — never blocks the auth flow.
+  Future<void> _registerFCMToken() async {
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      final registered = await fcmService.registerTokenWithBackend();
+      dev.log(
+        '[Auth] FCM token registration: ${registered ? '✅ success' : '⚠️ skipped'}',
+        name: 'auth',
+      );
+    } catch (e) {
+      dev.log('[Auth] FCM token registration failed: $e', name: 'auth');
     }
   }
 
@@ -71,6 +120,12 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
     try {
       final result = await _repository.login(email: email, password: password);
       state = AsyncData(result.user);
+
+      // Register FCM token now that auth token is available.
+      // Awaited to ensure registration completes, but errors are caught
+      // internally so the login result is never affected.
+      await _registerFCMToken();
+
       return true;
     } catch (e, stackTrace) {
       state = AsyncError(e, stackTrace);
@@ -95,6 +150,10 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
         passwordConfirmation: passwordConfirmation,
       );
       state = AsyncData(result.user);
+
+      // Register FCM token now that auth token is available.
+      await _registerFCMToken();
+
       return true;
     } catch (e, stackTrace) {
       state = AsyncError(e, stackTrace);
@@ -106,14 +165,23 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
   Future<void> logout() async {
     state = const AsyncLoading();
 
-    // Step 1: Call server logout (best effort)
+    // Step 1: Unregister FCM token from backend (best effort)
+    // Prevents push notifications being sent to a logged-out device.
+    try {
+      final fcmService = ref.read(fcmServiceProvider);
+      await fcmService.deleteToken();
+    } catch (e) {
+      dev.log('[Auth] Failed to delete FCM token on logout: $e', name: 'auth');
+    }
+
+    // Step 2: Call server logout (best effort)
     try {
       await _repository.logout();
     } catch (_) {
       // Ignore server errors - continue with local cleanup
     }
 
-    // Step 2: Clear all cached data from local database (CRITICAL)
+    // Step 3: Clear all cached data from local database (CRITICAL)
     // This must complete before clearing auth state to prevent
     // other users from seeing cached data on next login
     try {
@@ -125,7 +193,7 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
       debugPrint('Error clearing cache during logout: $e');
     }
 
-    // Step 3: Clear sync timestamps
+    // Step 4: Clear sync timestamps
     try {
       ref.read(goalsSyncNotifierProvider.notifier).clear();
       ref.read(calendarSyncNotifierProvider.notifier).clear();
@@ -133,7 +201,7 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
       // Non-critical, continue
     }
 
-    // Step 4: Clear auth state ONLY after all cleanup is done
+    // Step 5: Clear auth state ONLY after all cleanup is done
     // This triggers navigation to login, so cache must be clean by now
     state = const AsyncData(null);
   }

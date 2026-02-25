@@ -87,6 +87,7 @@ final dioProvider = Provider<Dio>((ref) {
   );
 
   dio.interceptors.addAll([
+    ConnectivityInterceptor(), // Must be first — fast-fails when offline
     AuthInterceptor(secureStorage),
     timezoneInterceptor,
     LoggingInterceptor(),

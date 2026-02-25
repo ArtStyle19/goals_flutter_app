@@ -1,5 +1,3 @@
-import 'dart:developer' as dev;
-
 import 'package:productivity/core/error/exceptions.dart';
 import 'package:productivity/core/network/api_client.dart';
 import 'package:productivity/core/network/api_endpoints.dart';
@@ -88,12 +86,17 @@ class FCMRemoteDataSource {
 
   /// Check FCM service status on the backend.
   ///
-  /// Returns status information about the notification service.
+  /// Returns status information about the notification service,
+  /// including server-side configuration and user-specific token status.
   Future<Map<String, dynamic>> getStatus() async {
     try {
       final response = await _apiClient.get(
         ApiEndpoints.notificationStatus,
-        parser: (data) => data as Map<String, dynamic>,
+        parser: (data) {
+          final map = data as Map<String, dynamic>;
+          // Unwrap the 'data' envelope so callers get flat status keys
+          return (map['data'] as Map<String, dynamic>?) ?? map;
+        },
       );
       return response;
     } catch (e) {

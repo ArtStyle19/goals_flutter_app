@@ -8,10 +8,4 @@ abstract class TaskRepository {
   Future<TaskEntity> skipTask(int id, {String? reason});
   Future<TaskEntity> lockTask(int id);
   Future<TaskEntity> unlockTask(int id);
-
-  /// Complete task from FCM notification action button.
-  Future<TaskEntity> completeTaskFromNotification(int id);
-
-  /// Skip task from FCM notification action button.
-  Future<TaskEntity> skipTaskFromNotification(int id);
 }

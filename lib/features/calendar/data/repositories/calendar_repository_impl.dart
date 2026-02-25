@@ -1,4 +1,3 @@
-import 'package:productivity/core/error/exceptions.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/features/calendar/data/datasources/calendar_local_datasource.dart';
 import 'package:productivity/features/calendar/data/datasources/calendar_remote_datasource.dart';
@@ -24,16 +23,7 @@ class CalendarRepositoryImpl implements CalendarRepository {
     required DateTime from,
     required DateTime to,
   }) async {
-    // Try cache first for immediate response (offline-first)
-    final cachedTasks = await _localDataSource.getTasksInRange(from, to);
-    if (cachedTasks.isNotEmpty) {
-      return (
-        tasks: cachedTasks.map((t) => t.toEntity()).toList(),
-        total: cachedTasks.length,
-      );
-    }
-
-    // Cache miss - fetch from remote and cache
+    // Always try remote first to get fresh data
     try {
       final result = await _remoteDataSource.getCalendar(
         from: AppDateUtils.toApiDate(from),
@@ -45,8 +35,15 @@ class CalendarRepositoryImpl implements CalendarRepository {
         tasks: result.tasks.map((t) => t.toEntity()).toList(),
         total: result.total,
       );
-    } on NetworkException catch (_) {
-      // No cache available and network failed
+    } catch (_) {
+      // Network error — fall back to cache for offline access
+      final cachedTasks = await _localDataSource.getTasksInRange(from, to);
+      if (cachedTasks.isNotEmpty) {
+        return (
+          tasks: cachedTasks.map((t) => t.toEntity()).toList(),
+          total: cachedTasks.length,
+        );
+      }
       rethrow;
     }
   }
@@ -62,24 +59,7 @@ class CalendarRepositoryImpl implements CalendarRepository {
     })
   >
   getToday() async {
-    // Try cache first for immediate response (offline-first)
-    final cachedTasks = await _localDataSource.getTodayTasks();
-    if (cachedTasks.isNotEmpty) {
-      // Calculate totals from cached tasks
-      final totalMinutes = cachedTasks.fold<int>(
-        0,
-        (sum, t) => sum + (t.durationMinutes ?? 60),
-      );
-      return (
-        date: AppDateUtils.toApiDate(DateTime.now()),
-        tasks: cachedTasks.map((t) => t.toEntity()).toList(),
-        totalTasks: cachedTasks.length,
-        totalMinutes: totalMinutes,
-        totalHours: totalMinutes / 60.0,
-      );
-    }
-
-    // Cache miss - fetch from remote and cache
+    // Always try remote first to get fresh data
     try {
       final result = await _remoteDataSource.getToday();
       // Cache today's tasks
@@ -91,25 +71,29 @@ class CalendarRepositoryImpl implements CalendarRepository {
         totalMinutes: result.totalMinutes,
         totalHours: result.totalHours,
       );
-    } on NetworkException catch (_) {
-      // No cache available and network failed
+    } catch (_) {
+      // Network error — fall back to cache for offline access
+      final cachedTasks = await _localDataSource.getTodayTasks();
+      if (cachedTasks.isNotEmpty) {
+        final totalMinutes = cachedTasks.fold<int>(
+          0,
+          (sum, t) => sum + (t.durationMinutes ?? 60),
+        );
+        return (
+          date: AppDateUtils.toApiDate(DateTime.now()),
+          tasks: cachedTasks.map((t) => t.toEntity()).toList(),
+          totalTasks: cachedTasks.length,
+          totalMinutes: totalMinutes,
+          totalHours: totalMinutes / 60.0,
+        );
+      }
       rethrow;
     }
   }
 
   @override
   Future<({TaskEntity? task, String? startsIn})> getNextTask() async {
-    // Try cache first for immediate response (offline-first)
-    final cachedTask = await _localDataSource.getNextUpcomingTask();
-    if (cachedTask != null) {
-      // Calculate startsIn from the cached task's scheduled time
-      // scheduledAt is a String (API format), parse to DateTime
-      final scheduledAt = DateTime.parse(cachedTask.scheduledAt);
-      final startsIn = _calculateStartsIn(scheduledAt);
-      return (task: cachedTask.toEntity(), startsIn: startsIn);
-    }
-
-    // Cache miss - fetch from remote and cache
+    // Always try remote first to get fresh data
     try {
       final result = await _remoteDataSource.getNextTask();
 
@@ -119,9 +103,16 @@ class CalendarRepositoryImpl implements CalendarRepository {
       }
 
       return (task: result.task?.toEntity(), startsIn: result.startsIn);
-    } on NetworkException catch (_) {
-      // No cache available and network failed
-      rethrow;
+    } catch (_) {
+      // Network error — fall back to cache for offline access
+      final cachedTask = await _localDataSource.getNextUpcomingTask();
+      if (cachedTask != null) {
+        final scheduledAt = DateTime.parse(cachedTask.scheduledAt);
+        final startsIn = _calculateStartsIn(scheduledAt);
+        return (task: cachedTask.toEntity(), startsIn: startsIn);
+      }
+      // No next task in cache — return empty result instead of throwing
+      return (task: null, startsIn: null);
     }
   }
 

@@ -34,9 +34,15 @@ abstract final class NotificationChannels {
 }
 
 /// Action identifiers attached to notification buttons.
+///
+/// Used by **both** local ongoing-task notifications and FCM-originated
+/// notifications shown via [FlutterLocalNotificationsPlugin].
 abstract final class NotificationActions {
-  /// User tapped "Completar" on an ongoing notification.
+  /// User tapped "Completar".
   static const completeTask = 'complete_task';
+
+  /// User tapped "Omitir" (FCM notifications only).
+  static const skipTask = 'skip_task';
 }
 
 /// Offset added to a task ID so that the *ongoing* notification uses a
@@ -61,17 +67,43 @@ abstract final class TestNotificationActions {
 
 /// Structured payload serialized as JSON in the notification's `payload`
 /// field.  Keeps routing and action-handling type-safe.
+///
+/// Supports two payload formats:
+/// - **Local notifications**: `{"taskId": 42, "action": "..."}`
+/// - **FCM data payloads**: `{"task_id": "42", "type": "task_start", ...}`
 class NotificationPayload {
   final int taskId;
   final String? action;
 
-  const NotificationPayload({required this.taskId, this.action});
+  /// `true` when this payload was deserialized from an FCM data message
+  /// (contains `task_id` + `type`), `false` for local payloads.
+  final bool fromFCM;
+
+  const NotificationPayload({
+    required this.taskId,
+    this.action,
+    this.fromFCM = false,
+  });
 
   factory NotificationPayload.fromJson(String json) {
     final map = jsonDecode(json) as Map<String, dynamic>;
+
+    // Detect origin: FCM payloads use 'task_id' (snake_case) + 'type'.
+    final isFCM = map.containsKey('task_id') && map.containsKey('type');
+
+    // Support both local format (taskId as int) and FCM format (task_id as String)
+    final rawTaskId = map['taskId'] ?? map['task_id'];
+    if (rawTaskId == null) {
+      throw FormatException('Payload missing taskId/task_id: $json');
+    }
+    final taskId = rawTaskId is int
+        ? rawTaskId
+        : int.parse(rawTaskId.toString());
+
     return NotificationPayload(
-      taskId: map['taskId'] as int,
+      taskId: taskId,
       action: map['action'] as String?,
+      fromFCM: isFCM,
     );
   }
 
@@ -85,8 +117,13 @@ class NotificationPayload {
 /// Called when the user taps a notification body → navigate to task.
 typedef OnNotificationTap = void Function(NotificationPayload payload);
 
-/// Called when the user taps the "Completar" action button.
+/// Called when the user taps the "Completar" action button on a local
+/// ongoing-task notification.
 typedef OnCompleteAction = Future<void> Function(int taskId);
+
+/// Called when the user taps an action button on an FCM notification
+/// (Complete or Skip). Receives the taskId and action name.
+typedef OnFCMTaskAction = void Function(int taskId, String action);
 
 // ═══════════════════════════════════════════════════════════
 // PROVIDERS
@@ -131,9 +168,16 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   final SharedPreferences _prefs;
 
+  /// Exposes the shared [FlutterLocalNotificationsPlugin] instance so that
+  /// other services (e.g. [FCMService]) can **show** notifications through
+  /// it without calling `initialize()` a second time (which would overwrite
+  /// the response handler registered here).
+  static FlutterLocalNotificationsPlugin get plugin => _plugin;
+
   /// Callbacks set once during [initialize].
   static OnNotificationTap? _onTap;
   static OnCompleteAction? _onComplete;
+  static OnFCMTaskAction? _onFCMAction;
 
   /// Tracks scheduled reminder notification IDs so we can cancel only
   /// reminders without touching ongoing task notifications.
@@ -160,14 +204,19 @@ class NotificationService {
   ///
   /// * [ianaTimezone] – IANA timezone from `flutter_timezone`.
   /// * [onTap]        – called when the user taps the notification body.
-  /// * [onComplete]   – called when the user taps "Completar".
+  /// * [onComplete]   – called when the user taps "Completar" on a **local**
+  ///                    ongoing-task notification.
+  /// * [onFCMAction]  – called when the user taps an action button on an
+  ///                    **FCM** notification (Complete or Skip).
   static Future<void> initialize({
     required String ianaTimezone,
     OnNotificationTap? onTap,
     OnCompleteAction? onComplete,
+    OnFCMTaskAction? onFCMAction,
   }) async {
     _onTap = onTap;
     _onComplete = onComplete;
+    _onFCMAction = onFCMAction;
 
     // Timezone
     tz.initializeTimeZones();
@@ -184,12 +233,29 @@ class NotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
       notificationCategories: [
+        // Category for local ongoing-task notifications (Completar only).
         DarwinNotificationCategory(
           'active_task',
           actions: [
             DarwinNotificationAction.plain(
               NotificationActions.completeTask,
               'Completar',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+          ],
+        ),
+        // Category for FCM task notifications (Completar + Omitir).
+        DarwinNotificationCategory(
+          'task_actions',
+          actions: [
+            DarwinNotificationAction.plain(
+              NotificationActions.completeTask,
+              'Completar',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+            DarwinNotificationAction.plain(
+              NotificationActions.skipTask,
+              'Omitir',
               options: {DarwinNotificationActionOption.foreground},
             ),
           ],
@@ -289,11 +355,48 @@ class NotificationService {
 
   /// Handles notification interaction in the foreground or when the app
   /// is opened from a notification tap.
+  ///
+  /// This is the **single** response handler for both local and FCM
+  /// notifications because [FlutterLocalNotificationsPlugin] is a
+  /// singleton — only the **last** `initialize()` call's handler is active.
   static void _handleResponse(NotificationResponse response) {
+    dev.log(
+      '[NotificationService] Response: actionId=${response.actionId}, '
+      'payload=${response.payload}',
+    );
+
     final payload = _parsePayload(response.payload);
     if (payload == null) return;
 
+    // ── FCM-originated notifications ────────────────────
+    // FCM payloads contain 'task_id' (snake_case) and extra fields like
+    // 'type', 'show_actions', etc.  Local payloads contain 'taskId'.
+    if (payload.fromFCM) {
+      dev.log(
+        '[NotificationService] FCM payload detected for taskId=${payload.taskId}',
+      );
+
+      if (response.actionId == NotificationActions.completeTask) {
+        dev.log('[NotificationService] FCM action: COMPLETE');
+        _onFCMAction?.call(payload.taskId, 'complete');
+        return;
+      }
+
+      if (response.actionId == NotificationActions.skipTask) {
+        dev.log('[NotificationService] FCM action: SKIP');
+        _onFCMAction?.call(payload.taskId, 'skip');
+        return;
+      }
+
+      // Body tap on FCM notification → open task.
+      dev.log('[NotificationService] FCM action: OPEN (body tap)');
+      _onFCMAction?.call(payload.taskId, 'open');
+      return;
+    }
+
+    // ── Local ongoing-task notifications ─────────────────
     if (response.actionId == NotificationActions.completeTask) {
+      dev.log('[NotificationService] Local action: COMPLETE');
       _onComplete?.call(payload.taskId);
       return;
     }
