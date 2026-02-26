@@ -6,6 +6,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:productivity/app/config/app_config.dart';
@@ -115,6 +116,15 @@ final fcmRemoteDataSourceProvider = Provider<FCMRemoteDataSource>((ref) {
 // AUTH PROVIDERS
 // ═══════════════════════════════════════════════════════════
 
+/// Google Sign-In singleton instance (v7+).
+///
+/// [GoogleSignIn.instance.initialize] must be called once during app startup
+/// (in main.dart) with the [serverClientId] before any sign-in attempt.
+/// Without it, [GoogleSignInAuthentication.idToken] will be null.
+final googleSignInProvider = Provider<GoogleSignIn>((ref) {
+  return GoogleSignIn.instance;
+});
+
 final authRemoteDataSourceProvider = Provider<AuthRemoteDataSource>((ref) {
   return AuthRemoteDataSourceImpl(ref.watch(apiClientProvider));
 });
@@ -130,6 +140,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
   return AuthRepositoryImpl(
     ref.watch(authRemoteDataSourceProvider),
     ref.watch(authLocalDataSourceProvider),
+    ref.watch(googleSignInProvider),
   );
 });
 

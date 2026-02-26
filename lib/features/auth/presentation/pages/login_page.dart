@@ -7,9 +7,10 @@ import 'package:productivity/core/utils/validators.dart';
 import 'package:productivity/core/widgets/async_value_widgets.dart';
 import 'package:productivity/features/auth/domain/entities/user_entity.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
+import 'package:productivity/features/auth/presentation/widgets/google_sign_in_button.dart';
 import 'package:productivity/features/auth/presentation/widgets/password_field.dart';
 
-/// Login page with email and password form.
+/// Login page with Google Sign-In as primary and email/password as secondary.
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
@@ -21,12 +22,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _showEmailForm = false;
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onGoogleSignIn() async {
+    final success = await ref.read(authProvider.notifier).loginWithGoogle();
+    if (success && mounted) {
+      context.go(AppRoutes.goals);
+    }
   }
 
   Future<void> _onLogin() async {
@@ -59,90 +68,135 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         child: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ─── Header ────────────────────────────
-                  Icon(
-                    Icons.rocket_launch_rounded,
-                    size: 64,
-                    color: Theme.of(context).colorScheme.primary,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ─── Header ────────────────────────────
+                Icon(
+                  Icons.rocket_launch_rounded,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Bienvenido de vuelta',
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Bienvenido de vuelta',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Inicia sesión para continuar',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Inicia sesión para continuar',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 40),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 40),
 
-                  // ─── Email ─────────────────────────────
-                  TextFormField(
-                    controller: _emailController,
-                    validator: Validators.email,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    enabled: !isLoading,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                // ─── Google Sign-In Button ───────────────
+                GoogleSignInButton(
+                  label: 'Continuar con Google',
+                  isLoading: isLoading,
+                  onPressed: _onGoogleSignIn,
+                ),
+                const SizedBox(height: 24),
 
-                  // ─── Password ──────────────────────────
-                  PasswordField(
-                    controller: _passwordController,
-                    validator: Validators.password,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _onLogin(),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // ─── Login Button ──────────────────────
-                  FilledButton(
-                    onPressed: isLoading ? null : _onLogin,
-                    child: isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text('Iniciar Sesión'),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ─── Register Link ─────────────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text('¿No tienes cuenta?'),
-                      TextButton(
-                        onPressed: isLoading
-                            ? null
-                            : () => context.go(AppRoutes.register),
-                        child: const Text('Regístrate'),
+                // ─── Divider ─────────────────────────────
+                Row(
+                  children: [
+                    const Expanded(child: Divider()),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'o',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
-                    ],
+                    ),
+                    const Expanded(child: Divider()),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // ─── Email/Password toggle ───────────────
+                if (!_showEmailForm)
+                  OutlinedButton(
+                    onPressed: isLoading
+                        ? null
+                        : () => setState(() => _showEmailForm = true),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(double.infinity, 48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Iniciar sesión con email'),
                   ),
-                ],
-              ),
+
+                // ─── Email/Password Form (collapsible) ──
+                if (_showEmailForm)
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _emailController,
+                          validator: Validators.email,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          enabled: !isLoading,
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        PasswordField(
+                          controller: _passwordController,
+                          validator: Validators.password,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _onLogin(),
+                        ),
+                        const SizedBox(height: 24),
+                        FilledButton(
+                          onPressed: isLoading ? null : _onLogin,
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(double.infinity, 48),
+                          ),
+                          child: isLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Iniciar Sesión'),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+
+                // ─── Register Link ─────────────────────
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('¿No tienes cuenta?'),
+                    TextButton(
+                      onPressed: isLoading
+                          ? null
+                          : () => context.go(AppRoutes.register),
+                      child: const Text('Regístrate'),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),

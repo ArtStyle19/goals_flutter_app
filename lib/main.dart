@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -35,6 +36,13 @@ Future<void> main() async {
   // Detect the device timezone (IANA identifier) for the X-Timezone header.
   final timezoneInterceptor = TimezoneInterceptor();
   await timezoneInterceptor.initialize();
+
+  // Initialize Google Sign-In with the Web Client ID from Google Cloud Console.
+  // Must be called exactly once before any authenticate() call.
+  await GoogleSignIn.instance.initialize(
+    serverClientId:
+        '676274056121-2kl8pduu8n6p7i310dd4dp9ugkd4dkqc.apps.googleusercontent.com',
+  );
 
   // Create the ProviderContainer early so callbacks can use it.
   _container = ProviderContainer(

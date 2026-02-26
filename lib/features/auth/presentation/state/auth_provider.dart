@@ -133,6 +133,32 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
     }
   }
 
+  /// Logs in or registers with Google (seamless).
+  ///
+  /// Returns `true` if login succeeded, `false` if the user cancelled.
+  /// Any error other than cancellation is propagated as [AsyncError].
+  Future<bool> loginWithGoogle() async {
+    state = const AsyncLoading();
+    dev.log('[AuthProvider] loginWithGoogle() started', name: 'auth');
+
+    try {
+      final result = await _repository.loginWithGoogle();
+      dev.log('[AuthProvider] loginWithGoogle() ✅ success, user=${result.user.email}', name: 'auth');
+      state = AsyncData(result.user);
+      await _registerFCMToken();
+      return true;
+    } on AuthCancelledException catch (_) {
+      // User dismissed the Google Sign-In sheet — NOT an error
+      dev.log('[AuthProvider] loginWithGoogle() — user cancelled', name: 'auth');
+      state = const AsyncData(null);
+      return false;
+    } catch (e, stackTrace) {
+      dev.log('[AuthProvider] loginWithGoogle() ❌ error: $e', name: 'auth');
+      state = AsyncError(e, stackTrace);
+      return false;
+    }
+  }
+
   /// Registers a new user.
   Future<bool> register({
     required String name,
@@ -175,6 +201,8 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
     }
 
     // Step 2: Call server logout (best effort)
+    // Note: GoogleSignIn.signOut() is called inside AuthRepositoryImpl.logout()
+    // to ensure the account picker shows on next login.
     try {
       await _repository.logout();
     } catch (_) {
@@ -189,7 +217,6 @@ class AuthNotifier extends AsyncNotifier<UserEntity?> {
       await db.clearAllCache();
     } catch (e) {
       // Log error but continue - don't block logout
-      // In production, you might want to report this to crashlytics
       debugPrint('Error clearing cache during logout: $e');
     }
 

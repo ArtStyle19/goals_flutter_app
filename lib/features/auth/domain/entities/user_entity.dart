@@ -10,5 +10,7 @@ abstract class UserEntity with _$UserEntity {
     required String name,
     required String email,
     required DateTime createdAt,
+    String? avatarUrl,
+    String? googleId,
   }) = _UserEntity;
 }

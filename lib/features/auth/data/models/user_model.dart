@@ -12,12 +12,18 @@ class UserModel {
   final String email;
   @JsonKey(name: 'created_at')
   final String createdAt;
+  @JsonKey(name: 'avatar_url')
+  final String? avatarUrl;
+  @JsonKey(name: 'google_id')
+  final String? googleId;
 
   const UserModel({
     required this.id,
     required this.name,
     required this.email,
     required this.createdAt,
+    this.avatarUrl,
+    this.googleId,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) =>
@@ -31,5 +37,7 @@ class UserModel {
     name: name,
     email: email,
     createdAt: DateTime.parse(createdAt),
+    avatarUrl: avatarUrl,
+    googleId: googleId,
   );
 }

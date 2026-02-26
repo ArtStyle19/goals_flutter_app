@@ -14,7 +14,7 @@ T _$identity<T>(T value) => value;
 /// @nodoc
 mixin _$UserEntity {
 
- int get id; String get name; String get email; DateTime get createdAt;
+ int get id; String get name; String get email; DateTime get createdAt; String? get avatarUrl; String? get googleId;
 /// Create a copy of UserEntity
 /// with the given fields replaced by the non-null parameter values.
 @JsonKey(includeFromJson: false, includeToJson: false)
@@ -25,16 +25,16 @@ $UserEntityCopyWith<UserEntity> get copyWith => _$UserEntityCopyWithImpl<UserEnt
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserEntity&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is UserEntity&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&(identical(other.googleId, googleId) || other.googleId == googleId));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,name,email,createdAt);
+int get hashCode => Object.hash(runtimeType,id,name,email,createdAt,avatarUrl,googleId);
 
 @override
 String toString() {
-  return 'UserEntity(id: $id, name: $name, email: $email, createdAt: $createdAt)';
+  return 'UserEntity(id: $id, name: $name, email: $email, createdAt: $createdAt, avatarUrl: $avatarUrl, googleId: $googleId)';
 }
 
 
@@ -45,7 +45,7 @@ abstract mixin class $UserEntityCopyWith<$Res>  {
   factory $UserEntityCopyWith(UserEntity value, $Res Function(UserEntity) _then) = _$UserEntityCopyWithImpl;
 @useResult
 $Res call({
- int id, String name, String email, DateTime createdAt
+ int id, String name, String email, DateTime createdAt, String? avatarUrl, String? googleId
 });
 
 
@@ -62,13 +62,15 @@ class _$UserEntityCopyWithImpl<$Res>
 
 /// Create a copy of UserEntity
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? email = null,Object? createdAt = null,}) {
+@pragma('vm:prefer-inline') @override $Res call({Object? id = null,Object? name = null,Object? email = null,Object? createdAt = null,Object? avatarUrl = freezed,Object? googleId = freezed,}) {
   return _then(_self.copyWith(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
 as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as DateTime,
+as DateTime,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,googleId: freezed == googleId ? _self.googleId : googleId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 
@@ -153,10 +155,10 @@ return $default(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String name,  String email,  DateTime createdAt)?  $default,{required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>(TResult Function( int id,  String name,  String email,  DateTime createdAt,  String? avatarUrl,  String? googleId)?  $default,{required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case _UserEntity() when $default != null:
-return $default(_that.id,_that.name,_that.email,_that.createdAt);case _:
+return $default(_that.id,_that.name,_that.email,_that.createdAt,_that.avatarUrl,_that.googleId);case _:
   return orElse();
 
 }
@@ -174,10 +176,10 @@ return $default(_that.id,_that.name,_that.email,_that.createdAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String name,  String email,  DateTime createdAt)  $default,) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>(TResult Function( int id,  String name,  String email,  DateTime createdAt,  String? avatarUrl,  String? googleId)  $default,) {final _that = this;
 switch (_that) {
 case _UserEntity():
-return $default(_that.id,_that.name,_that.email,_that.createdAt);case _:
+return $default(_that.id,_that.name,_that.email,_that.createdAt,_that.avatarUrl,_that.googleId);case _:
   throw StateError('Unexpected subclass');
 
 }
@@ -194,10 +196,10 @@ return $default(_that.id,_that.name,_that.email,_that.createdAt);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String name,  String email,  DateTime createdAt)?  $default,) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>(TResult? Function( int id,  String name,  String email,  DateTime createdAt,  String? avatarUrl,  String? googleId)?  $default,) {final _that = this;
 switch (_that) {
 case _UserEntity() when $default != null:
-return $default(_that.id,_that.name,_that.email,_that.createdAt);case _:
+return $default(_that.id,_that.name,_that.email,_that.createdAt,_that.avatarUrl,_that.googleId);case _:
   return null;
 
 }
@@ -209,13 +211,15 @@ return $default(_that.id,_that.name,_that.email,_that.createdAt);case _:
 
 
 class _UserEntity implements UserEntity {
-  const _UserEntity({required this.id, required this.name, required this.email, required this.createdAt});
+  const _UserEntity({required this.id, required this.name, required this.email, required this.createdAt, this.avatarUrl, this.googleId});
   
 
 @override final  int id;
 @override final  String name;
 @override final  String email;
 @override final  DateTime createdAt;
+@override final  String? avatarUrl;
+@override final  String? googleId;
 
 /// Create a copy of UserEntity
 /// with the given fields replaced by the non-null parameter values.
@@ -227,16 +231,16 @@ _$UserEntityCopyWith<_UserEntity> get copyWith => __$UserEntityCopyWithImpl<_Use
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserEntity&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is _UserEntity&&(identical(other.id, id) || other.id == id)&&(identical(other.name, name) || other.name == name)&&(identical(other.email, email) || other.email == email)&&(identical(other.createdAt, createdAt) || other.createdAt == createdAt)&&(identical(other.avatarUrl, avatarUrl) || other.avatarUrl == avatarUrl)&&(identical(other.googleId, googleId) || other.googleId == googleId));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,id,name,email,createdAt);
+int get hashCode => Object.hash(runtimeType,id,name,email,createdAt,avatarUrl,googleId);
 
 @override
 String toString() {
-  return 'UserEntity(id: $id, name: $name, email: $email, createdAt: $createdAt)';
+  return 'UserEntity(id: $id, name: $name, email: $email, createdAt: $createdAt, avatarUrl: $avatarUrl, googleId: $googleId)';
 }
 
 
@@ -247,7 +251,7 @@ abstract mixin class _$UserEntityCopyWith<$Res> implements $UserEntityCopyWith<$
   factory _$UserEntityCopyWith(_UserEntity value, $Res Function(_UserEntity) _then) = __$UserEntityCopyWithImpl;
 @override @useResult
 $Res call({
- int id, String name, String email, DateTime createdAt
+ int id, String name, String email, DateTime createdAt, String? avatarUrl, String? googleId
 });
 
 
@@ -264,13 +268,15 @@ class __$UserEntityCopyWithImpl<$Res>
 
 /// Create a copy of UserEntity
 /// with the given fields replaced by the non-null parameter values.
-@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? email = null,Object? createdAt = null,}) {
+@override @pragma('vm:prefer-inline') $Res call({Object? id = null,Object? name = null,Object? email = null,Object? createdAt = null,Object? avatarUrl = freezed,Object? googleId = freezed,}) {
   return _then(_UserEntity(
 id: null == id ? _self.id : id // ignore: cast_nullable_to_non_nullable
 as int,name: null == name ? _self.name : name // ignore: cast_nullable_to_non_nullable
 as String,email: null == email ? _self.email : email // ignore: cast_nullable_to_non_nullable
 as String,createdAt: null == createdAt ? _self.createdAt : createdAt // ignore: cast_nullable_to_non_nullable
-as DateTime,
+as DateTime,avatarUrl: freezed == avatarUrl ? _self.avatarUrl : avatarUrl // ignore: cast_nullable_to_non_nullable
+as String?,googleId: freezed == googleId ? _self.googleId : googleId // ignore: cast_nullable_to_non_nullable
+as String?,
   ));
 }
 

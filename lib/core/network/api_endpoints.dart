@@ -10,6 +10,7 @@ abstract final class ApiEndpoints {
   static const String login = '/login';
   static const String logout = '/logout';
   static const String me = '/me';
+  static const String googleAuth = '/auth/google';
 
   // ─── Goals ──────────────────────────────────────────────
   static const String goals = '/goals';

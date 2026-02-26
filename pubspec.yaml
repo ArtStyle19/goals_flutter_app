@@ -64,6 +64,7 @@ dependencies:
   flutter_dotenv: ^5.1.2
   google_fonts: ^8.0.1
   rename: ^3.1.0
+  google_sign_in: ^7.2.0
 
 dev_dependencies:
   flutter_test:
