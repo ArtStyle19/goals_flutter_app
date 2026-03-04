@@ -196,6 +196,37 @@ class GoalRepositoryImpl implements GoalRepository {
   }
 
   @override
+  Future<GoalEntity> replanGoal(
+    int goalId, {
+    String? description,
+    DateTime? deadline,
+    List<AvailabilityRuleEntity>? availabilityRules,
+  }) async {
+    final model = await _remoteDataSource.replanGoal(
+      goalId,
+      description: description,
+      deadline: deadline != null ? AppDateUtils.toApiDate(deadline) : null,
+      availabilityRules: availabilityRules
+          ?.map((r) => AvailabilityRuleModel.fromEntity(r))
+          .toList(),
+    );
+
+    // Replan replaces all pending/skipped tasks — invalidate entire task cache
+    // for this goal and replace with fresh data from the server.
+    await _taskLocalDataSource.deleteTasksByGoalId(goalId);
+
+    // Cache the updated goal (may have new status, description, capacity)
+    await _localDataSource.cacheGoal(model);
+
+    // Cache the new tasks returned by the server
+    if (model.tasks != null && model.tasks!.isNotEmpty) {
+      await _taskLocalDataSource.cacheTasks(model.tasks!);
+    }
+
+    return model.toEntity();
+  }
+
+  @override
   Future<GoalEntity> updateAvailability(
     int goalId,
     List<AvailabilityRuleEntity> rules,

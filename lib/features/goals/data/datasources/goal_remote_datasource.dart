@@ -17,6 +17,12 @@ abstract class GoalRemoteDataSource {
   Future<GoalModel> addTasks(int goalId, List<Map<String, String>> tasks);
   Future<GoalStatsModel> getStats(int goalId);
   Future<GoalModel> completeGoal(int goalId);
+  Future<GoalModel> replanGoal(
+    int goalId, {
+    String? description,
+    String? deadline,
+    List<AvailabilityRuleModel>? availabilityRules,
+  });
   Future<GoalModel> updateAvailability(
     int goalId,
     List<AvailabilityRuleModel> rules,
@@ -133,6 +139,32 @@ class GoalRemoteDataSourceImpl implements GoalRemoteDataSource {
   Future<GoalModel> completeGoal(int goalId) {
     return _apiClient.post(
       ApiEndpoints.goalComplete(goalId),
+      parser: (data) {
+        final json = data as Map<String, dynamic>;
+        return GoalModel.fromJson(json['goal'] as Map<String, dynamic>);
+      },
+    );
+  }
+
+  @override
+  Future<GoalModel> replanGoal(
+    int goalId, {
+    String? description,
+    String? deadline,
+    List<AvailabilityRuleModel>? availabilityRules,
+  }) {
+    return _apiClient.post(
+      ApiEndpoints.goalReplan(goalId),
+      data: {
+        if (description != null) 'description': description,
+        if (deadline != null) 'deadline': deadline,
+        if (availabilityRules != null)
+          'availability_rules': availabilityRules
+              .map((r) => r.toJson())
+              .toList(),
+      },
+      // Replan uses OpenAI for task generation, needs extended timeout
+      requestTimeout: EnvConfig.goalCreateTimeout,
       parser: (data) {
         final json = data as Map<String, dynamic>;
         return GoalModel.fromJson(json['goal'] as Map<String, dynamic>);

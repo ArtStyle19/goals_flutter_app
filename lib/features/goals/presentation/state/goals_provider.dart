@@ -107,6 +107,23 @@ class GoalsNotifier extends AsyncNotifier<List<GoalEntity>> {
     await refresh();
   }
 
+  Future<GoalEntity> replanGoal(
+    int goalId, {
+    String? description,
+    DateTime? deadline,
+    List<AvailabilityRuleEntity>? availabilityRules,
+  }) async {
+    final repository = ref.read(goalRepositoryProvider);
+    final goal = await repository.replanGoal(
+      goalId,
+      description: description,
+      deadline: deadline,
+      availabilityRules: availabilityRules,
+    );
+    await refresh();
+    return goal;
+  }
+
   Future<GoalEntity> updateAvailability(
     int goalId,
     List<AvailabilityRuleEntity> rules,

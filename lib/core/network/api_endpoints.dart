@@ -19,6 +19,7 @@ abstract final class ApiEndpoints {
   static String goalGenerate(int id) => '/goals/$id/generate';
   static String goalTasks(int id) => '/goals/$id/tasks';
   static String goalComplete(int id) => '/goals/$id/complete';
+  static String goalReplan(int id) => '/goals/$id/replan';
   static String goalAvailability(int id) => '/goals/$id/availability';
   static String goalDeadline(int id) => '/goals/$id/deadline';
 

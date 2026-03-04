@@ -24,6 +24,12 @@ abstract class GoalRepository {
   Future<GoalEntity> addTasks(int goalId, List<Map<String, String>> tasks);
   Future<GoalStatsEntity> getStats(int goalId);
   Future<GoalEntity> completeGoal(int goalId);
+  Future<GoalEntity> replanGoal(
+    int goalId, {
+    String? description,
+    DateTime? deadline,
+    List<AvailabilityRuleEntity>? availabilityRules,
+  });
   Future<GoalEntity> updateAvailability(
     int goalId,
     List<AvailabilityRuleEntity> rules,

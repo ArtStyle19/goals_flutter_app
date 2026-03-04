@@ -14,6 +14,7 @@ import 'package:productivity/features/goals/presentation/pages/create_goal_page.
 import 'package:productivity/features/goals/presentation/pages/goal_detail_page.dart';
 import 'package:productivity/features/goals/presentation/pages/goal_stats_page.dart';
 import 'package:productivity/features/goals/presentation/pages/goals_list_page.dart';
+import 'package:productivity/features/goals/presentation/pages/replan_goal_page.dart';
 import 'package:productivity/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:productivity/features/settings/presentation/pages/settings_page.dart';
 import 'package:productivity/features/tasks/presentation/pages/task_detail_page.dart';
@@ -172,6 +173,17 @@ final routerProvider = Provider<GoRouter>((ref) {
                           return _buildSlideTransition(
                             state: state,
                             child: GoalStatsPage(goalId: id),
+                          );
+                        },
+                      ),
+                      GoRoute(
+                        path: 'replan',
+                        parentNavigatorKey: rootNavigatorKey,
+                        pageBuilder: (context, state) {
+                          final id = int.parse(state.pathParameters['id']!);
+                          return _buildSlideTransition(
+                            state: state,
+                            child: ReplanGoalPage(goalId: id),
                           );
                         },
                       ),
