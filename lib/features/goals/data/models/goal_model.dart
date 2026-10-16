@@ -1,46 +1,43 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import 'package:productivity/core/utils/json_converters.dart';
 import 'package:productivity/features/tasks/data/models/task_model.dart';
 import 'package:productivity/features/goals/data/models/availability_rule_model.dart';
 import 'package:productivity/features/goals/domain/entities/goal_entity.dart';
 
 part 'goal_model.g.dart';
 
-/// Safely converts a value that might be String or num to double.
-double? _toDoubleNullable(dynamic value) {
-  if (value == null) return null;
-  if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value);
-  return null;
-}
-
 /// DTO for Goal data from the API.
 @JsonSerializable(explicitToJson: true)
 class GoalModel {
   final int id;
-  @JsonKey(name: 'user_id')
+  @JsonKey(name: 'user_id', fromJson: safeIntNullable)
   final int? userId;
+  @JsonKey(fromJson: safeString)
   final String title;
+  @JsonKey(fromJson: safeStringNullable)
   final String? description;
+  @JsonKey(fromJson: safeString)
   final String deadline;
-  @JsonKey(name: 'session_duration_minutes')
+  @JsonKey(name: 'session_duration_minutes', fromJson: safeInt)
   final int sessionDurationMinutes;
   @JsonKey(name: 'availability_rules')
   final List<AvailabilityRuleModel> availabilityRules;
+  @JsonKey(fromJson: safeString)
   final String status;
-  @JsonKey(name: 'total_sessions')
+  @JsonKey(name: 'total_sessions', fromJson: safeIntNullable)
   final int? totalSessions;
-  @JsonKey(name: 'total_hours', fromJson: _toDoubleNullable)
+  @JsonKey(name: 'total_hours', fromJson: safeDoubleNullable)
   final double? totalHours;
-  @JsonKey(name: 'completed_at')
+  @JsonKey(name: 'completed_at', fromJson: safeStringNullable)
   final String? completedAt;
-  @JsonKey(name: 'created_at')
+  @JsonKey(name: 'created_at', fromJson: safeString)
   final String createdAt;
-  @JsonKey(name: 'updated_at')
+  @JsonKey(name: 'updated_at', fromJson: safeString)
   final String updatedAt;
-  @JsonKey(name: 'tasks_count')
+  @JsonKey(name: 'tasks_count', fromJson: safeIntNullable)
   final int? tasksCount;
-  @JsonKey(name: 'completed_tasks_count')
+  @JsonKey(name: 'completed_tasks_count', fromJson: safeIntNullable)
   final int? completedTasksCount;
   final List<TaskModel>? tasks;
 

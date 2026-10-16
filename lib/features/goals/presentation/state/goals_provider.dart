@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/features/goals/domain/entities/goal_entity.dart';
 import 'package:productivity/features/goals/domain/entities/goal_stats_entity.dart';
+import 'package:productivity/features/goals/presentation/state/goals_sync_provider.dart';
 
 /// Provider for the list of goals.
 final goalsProvider = AsyncNotifierProvider<GoalsNotifier, List<GoalEntity>>(
@@ -30,7 +31,12 @@ class GoalsNotifier extends AsyncNotifier<List<GoalEntity>> {
   @override
   Future<List<GoalEntity>> build() async {
     final repository = ref.watch(goalRepositoryProvider);
-    return repository.getGoals();
+    final goals = await repository.getGoals();
+
+    // Mark sync timestamp on successful fetch
+    ref.read(goalsSyncNotifierProvider.notifier).markSynced();
+
+    return goals;
   }
 
   Future<void> refresh() async {
@@ -99,6 +105,23 @@ class GoalsNotifier extends AsyncNotifier<List<GoalEntity>> {
     final repository = ref.read(goalRepositoryProvider);
     await repository.completeGoal(goalId);
     await refresh();
+  }
+
+  Future<GoalEntity> replanGoal(
+    int goalId, {
+    String? description,
+    DateTime? deadline,
+    List<AvailabilityRuleEntity>? availabilityRules,
+  }) async {
+    final repository = ref.read(goalRepositoryProvider);
+    final goal = await repository.replanGoal(
+      goalId,
+      description: description,
+      deadline: deadline,
+      availabilityRules: availabilityRules,
+    );
+    await refresh();
+    return goal;
   }
 
   Future<GoalEntity> updateAvailability(

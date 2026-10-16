@@ -9,17 +9,19 @@ part of 'task_model.dart';
 TaskModel _$TaskModelFromJson(Map<String, dynamic> json) => TaskModel(
   id: (json['id'] as num).toInt(),
   goalId: (json['goal_id'] as num).toInt(),
-  goalTitle: json['goal_title'] as String?,
-  title: json['title'] as String,
-  description: json['description'] as String?,
-  order: json['order'] == null ? 0 : _safeInt(json['order']),
-  scheduledAt: json['scheduled_at'] as String,
-  endAt: json['end_at'] as String?,
-  durationMinutes: _safeIntNullable(json['duration_minutes']),
-  status: json['status'] as String,
-  isLocked: json['is_locked'] == null ? false : _safeBool(json['is_locked']),
-  notes: json['notes'] as String?,
-  completedAt: json['completed_at'] as String?,
+  goalTitle: safeStringNullable(json['goal_title']),
+  title: safeString(json['title']),
+  description: safeStringNullable(json['description']),
+  order: json['order'] == null ? 0 : safeInt(json['order']),
+  scheduledAt: json['scheduled_at'] == null
+      ? ''
+      : safeString(json['scheduled_at']),
+  endAt: safeStringNullable(json['end_at']),
+  durationMinutes: safeIntNullable(json['duration_minutes']),
+  status: json['status'] == null ? 'scheduled' : safeString(json['status']),
+  isLocked: json['is_locked'] == null ? false : safeBool(json['is_locked']),
+  notes: safeStringNullable(json['notes']),
+  completedAt: safeStringNullable(json['completed_at']),
 );
 
 Map<String, dynamic> _$TaskModelToJson(TaskModel instance) => <String, dynamic>{

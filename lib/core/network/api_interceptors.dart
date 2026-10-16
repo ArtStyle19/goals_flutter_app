@@ -1,11 +1,13 @@
-/// Dio interceptors for authentication, timezone, and logging.
+/// Dio interceptors for authentication, timezone, connectivity, and logging.
 library;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 
+import 'package:productivity/app/config/env_config.dart';
 import 'package:productivity/core/constants/storage_keys.dart';
 
 /// Intercepts outgoing requests to inject the Bearer token.
@@ -23,6 +25,44 @@ class AuthInterceptor extends Interceptor {
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
+    handler.next(options);
+  }
+}
+
+/// Rejects requests immediately when the device has no network connection.
+///
+/// Must be added as the **first** interceptor in the Dio pipeline so it
+/// short-circuits before the request hits the socket layer (which would
+/// block until [connectTimeout] expires — typically seconds of dead wait).
+///
+/// When connectivity returns [ConnectivityResult.none], the interceptor
+/// produces a [DioException] of type [DioExceptionType.connectionError],
+/// which [ApiClient._handleDioError] already maps to [NetworkException].
+/// Repositories then fall back to cached data immediately.
+class ConnectivityInterceptor extends Interceptor {
+  final Connectivity _connectivity;
+
+  ConnectivityInterceptor([Connectivity? connectivity])
+    : _connectivity = connectivity ?? Connectivity();
+
+  @override
+  Future<void> onRequest(
+    RequestOptions options,
+    RequestInterceptorHandler handler,
+  ) async {
+    final results = await _connectivity.checkConnectivity();
+    final hasConnection = results.any((r) => r != ConnectivityResult.none);
+
+    if (!hasConnection) {
+      return handler.reject(
+        DioException(
+          requestOptions: options,
+          type: DioExceptionType.connectionError,
+          message: 'Sin conexión a internet.',
+        ),
+      );
+    }
+
     handler.next(options);
   }
 }
@@ -58,11 +98,18 @@ class TimezoneInterceptor extends Interceptor {
   }
 }
 
-/// Logs request and response details in debug mode.
+/// Logs request and response details when logging is enabled.
+///
+/// Controlled by ENABLE_LOGGING environment variable.
 class LoggingInterceptor extends Interceptor {
+  /// Checks if logging is enabled via environment config or debug mode.
+  bool get _isLoggingEnabled {
+    return kDebugMode && EnvConfig.enableLogging;
+  }
+
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    if (kDebugMode) {
+    if (_isLoggingEnabled) {
       debugPrint('┌─── REQUEST ──────────────────────────────────');
       debugPrint('│ ${options.method} ${options.uri}');
       if (options.data != null) {
@@ -78,7 +125,7 @@ class LoggingInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
-    if (kDebugMode) {
+    if (_isLoggingEnabled) {
       debugPrint('┌─── RESPONSE ─────────────────────────────────');
       debugPrint('│ ${response.statusCode} ${response.requestOptions.uri}');
       debugPrint('└──────────────────────────────────────────────');
@@ -88,7 +135,7 @@ class LoggingInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
-    if (kDebugMode) {
+    if (_isLoggingEnabled) {
       debugPrint('┌─── ERROR ────────────────────────────────────');
       debugPrint('│ ${err.response?.statusCode} ${err.requestOptions.uri}');
       debugPrint('│ ${err.message}');

@@ -16,6 +16,11 @@ abstract class AuthRepository {
     required String password,
   });
 
+  /// Logs in or registers with Google (seamless).
+  ///
+  /// Returns the user, token, and whether the user was just created.
+  Future<({UserEntity user, String token, bool isNewUser})> loginWithGoogle();
+
   /// Logs out the current user.
   Future<void> logout();
 

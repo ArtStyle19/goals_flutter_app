@@ -5,7 +5,31 @@ import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
 part 'goal_entity.freezed.dart';
 
 /// Goal status enum matching the backend.
-enum GoalStatus { draft, active, completed }
+enum GoalStatus {
+  draft('draft'),
+  active('active'),
+  completed('completed'),
+  archived('archived');
+
+  final String value;
+  const GoalStatus(this.value);
+
+  /// Creates a [GoalStatus] from a string value.
+  static GoalStatus fromString(String? value) {
+    if (value == null) return GoalStatus.active;
+    return GoalStatus.values.firstWhere(
+      (status) => status.value == value,
+      orElse: () => GoalStatus.active,
+    );
+  }
+
+  /// Whether the goal is in a final state.
+  bool get isFinal =>
+      this == GoalStatus.completed || this == GoalStatus.archived;
+
+  /// Whether the goal is still active.
+  bool get isActive => this == GoalStatus.active || this == GoalStatus.draft;
+}
 
 /// Represents a goal in the domain layer.
 @freezed
@@ -56,4 +80,23 @@ abstract class AvailabilityRuleEntity with _$AvailabilityRuleEntity {
     required String start,
     required String end,
   }) = _AvailabilityRuleEntity;
+}
+
+/// Extension to provide display names and utilities for goal statuses.
+extension GoalStatusX on GoalStatus {
+  /// Human-readable display name in Spanish.
+  String get displayName {
+    return switch (this) {
+      GoalStatus.draft => 'Borrador',
+      GoalStatus.active => 'Activa',
+      GoalStatus.completed => 'Completada',
+      GoalStatus.archived => 'Archivada',
+    };
+  }
+
+  /// Whether the goal can be completed.
+  bool get canComplete => this == GoalStatus.active;
+
+  /// Whether the goal can be edited.
+  bool get canEdit => this == GoalStatus.active || this == GoalStatus.draft;
 }

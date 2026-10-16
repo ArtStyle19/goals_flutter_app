@@ -8,22 +8,22 @@ part of 'goal_model.dart';
 
 GoalModel _$GoalModelFromJson(Map<String, dynamic> json) => GoalModel(
   id: (json['id'] as num).toInt(),
-  userId: (json['user_id'] as num?)?.toInt(),
-  title: json['title'] as String,
-  description: json['description'] as String?,
-  deadline: json['deadline'] as String,
-  sessionDurationMinutes: (json['session_duration_minutes'] as num).toInt(),
+  userId: safeIntNullable(json['user_id']),
+  title: safeString(json['title']),
+  description: safeStringNullable(json['description']),
+  deadline: safeString(json['deadline']),
+  sessionDurationMinutes: safeInt(json['session_duration_minutes']),
   availabilityRules: (json['availability_rules'] as List<dynamic>)
       .map((e) => AvailabilityRuleModel.fromJson(e as Map<String, dynamic>))
       .toList(),
-  status: json['status'] as String,
-  totalSessions: (json['total_sessions'] as num?)?.toInt(),
-  totalHours: _toDoubleNullable(json['total_hours']),
-  completedAt: json['completed_at'] as String?,
-  createdAt: json['created_at'] as String,
-  updatedAt: json['updated_at'] as String,
-  tasksCount: (json['tasks_count'] as num?)?.toInt(),
-  completedTasksCount: (json['completed_tasks_count'] as num?)?.toInt(),
+  status: safeString(json['status']),
+  totalSessions: safeIntNullable(json['total_sessions']),
+  totalHours: safeDoubleNullable(json['total_hours']),
+  completedAt: safeStringNullable(json['completed_at']),
+  createdAt: safeString(json['created_at']),
+  updatedAt: safeString(json['updated_at']),
+  tasksCount: safeIntNullable(json['tasks_count']),
+  completedTasksCount: safeIntNullable(json['completed_tasks_count']),
   tasks: (json['tasks'] as List<dynamic>?)
       ?.map((e) => TaskModel.fromJson(e as Map<String, dynamic>))
       .toList(),

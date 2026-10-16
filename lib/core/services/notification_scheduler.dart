@@ -28,8 +28,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:productivity/app/di/injection_container.dart';
 import 'package:productivity/core/services/notification_service.dart';
+import 'package:productivity/features/auth/domain/entities/user_entity.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
-import 'package:productivity/features/auth/presentation/state/auth_state.dart';
 
 /// Provider for the [NotificationScheduler] singleton.
 final notificationSchedulerProvider = Provider<NotificationScheduler>((ref) {
@@ -66,8 +66,8 @@ class NotificationScheduler with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
 
     // Listen to auth state changes.
-    _ref.listen<AuthState>(authNotifierProvider, (previous, next) {
-      _onAuthStateChanged(previous, next);
+    _ref.listen<AsyncValue<UserEntity?>>(authProvider, (previous, next) {
+      _onAuthStateChanged(previous?.valueOrNull, next.valueOrNull);
     });
 
     dev.log('[NotificationScheduler] Initialized', name: 'notifications');
@@ -95,9 +95,9 @@ class NotificationScheduler with WidgetsBindingObserver {
 
   // ─── Auth State Handler ────────────────────────────────
 
-  void _onAuthStateChanged(AuthState? previous, AuthState next) {
-    if (next is AuthAuthenticated) {
-      final newUserId = next.user.id;
+  void _onAuthStateChanged(UserEntity? previous, UserEntity? next) {
+    if (next != null) {
+      final newUserId = next.id;
 
       // If switching accounts, clear old notifications first.
       if (_lastSyncedUserId != null && _lastSyncedUserId != newUserId) {
@@ -114,7 +114,7 @@ class NotificationScheduler with WidgetsBindingObserver {
         name: 'notifications',
       );
       syncNow();
-    } else if (next is AuthUnauthenticated) {
+    } else {
       dev.log(
         '[NotificationScheduler] Logged out → clearing all notifications',
         name: 'notifications',
@@ -136,8 +136,8 @@ class NotificationScheduler with WidgetsBindingObserver {
   /// 5. Schedule reminders + sync ongoing notifications.
   void syncNow() {
     // Don't sync if not authenticated.
-    final authState = _ref.read(authNotifierProvider);
-    if (authState is! AuthAuthenticated) return;
+    final user = _ref.read(authProvider).valueOrNull;
+    if (user == null) return;
 
     // Don't sync if notifications are disabled.
     final service = _ref.read(notificationServiceProvider);
@@ -153,8 +153,8 @@ class NotificationScheduler with WidgetsBindingObserver {
   /// The actual sync logic — fetches tasks and updates notifications.
   Future<void> _performSync() async {
     try {
-      final authState = _ref.read(authNotifierProvider);
-      if (authState is! AuthAuthenticated) return;
+      final user = _ref.read(authProvider).valueOrNull;
+      if (user == null) return;
 
       final repository = _ref.read(calendarRepositoryProvider);
       final today = await repository.getToday();

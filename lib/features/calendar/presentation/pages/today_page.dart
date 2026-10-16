@@ -10,8 +10,10 @@ import 'package:productivity/core/services/notification_service.dart';
 import 'package:productivity/core/utils/date_utils.dart';
 import 'package:productivity/core/widgets/app_error_widget.dart';
 import 'package:productivity/core/widgets/empty_state_widget.dart';
+import 'package:productivity/core/widgets/last_sync_indicator.dart';
 import 'package:productivity/core/widgets/loading_widget.dart';
 import 'package:productivity/features/calendar/presentation/state/calendar_provider.dart';
+import 'package:productivity/features/calendar/presentation/state/calendar_sync_provider.dart';
 import 'package:productivity/features/tasks/domain/entities/task_entity.dart';
 import 'package:productivity/features/tasks/presentation/state/task_provider.dart';
 
@@ -23,24 +25,36 @@ class TodayPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final todayAsync = ref.watch(todayProvider);
     final nextAsync = ref.watch(nextTaskProvider);
+    final lastSync = ref.watch(calendarLastSyncProvider);
+    final isLoading = todayAsync is AsyncLoading || nextAsync is AsyncLoading;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Hoy'),
         actions: [
+          // Last sync indicator
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: LastSyncIndicator(
+                timestamp: lastSync,
+                isLoading: isLoading,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.invalidate(todayProvider);
-              ref.invalidate(nextTaskProvider);
+            onPressed: () async {
+              await ref.read(todayProvider.notifier).refresh();
+              await ref.read(nextTaskProvider.notifier).refresh();
             },
           ),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          ref.invalidate(todayProvider);
-          ref.invalidate(nextTaskProvider);
+          await ref.read(todayProvider.notifier).refresh();
+          await ref.read(nextTaskProvider.notifier).refresh();
         },
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -49,9 +63,18 @@ class TodayPage extends ConsumerWidget {
             // ─── Next Task Card ──────────────────────
             nextAsync.when(
               loading: () => const _NextTaskSkeleton(),
-              error: (e, st) => const SizedBox.shrink(),
+              error: (e, st) {
+                // Log error for debugging - next task should show even online
+                debugPrint('Next task error: $e');
+                // Show empty state instead of hiding - allows retry
+                return _NextTaskEmpty(
+                  onRetry: () => ref.read(nextTaskProvider.notifier).refresh(),
+                );
+              },
               data: (data) {
-                if (data.task == null) return const SizedBox.shrink();
+                if (data.task == null) {
+                  return const _NextTaskEmpty();
+                }
                 return _NextTaskCard(
                   task: data.task!,
                   startsIn: data.startsIn ?? '',
@@ -72,7 +95,7 @@ class TodayPage extends ConsumerWidget {
                   const LoadingWidget(message: 'Cargando tareas de hoy...'),
               error: (e, _) => AppErrorWidget(
                 message: userFriendlyMessage(e),
-                onRetry: () => ref.invalidate(todayProvider),
+                onRetry: () => ref.read(todayProvider.notifier).refresh(),
               ),
               data: (data) {
                 if (data.tasks.isEmpty) {
@@ -141,9 +164,7 @@ class TodayPage extends ConsumerWidget {
       // Dismiss the ongoing notification for this task.
       await ref.read(notificationServiceProvider).dismissOngoingTask(task.id);
 
-      ref.invalidate(todayProvider);
-      ref.invalidate(nextTaskProvider);
-
+      // No need to manually refresh - task_provider now auto-invalidates providers
       // Re-sync notifications so the next active task gets notified.
       ref.read(notificationSchedulerProvider).syncNow();
 
@@ -257,6 +278,64 @@ class _NextTaskSkeleton extends StatelessWidget {
     return Card(
       color: AppColors.primary.withValues(alpha: 0.3),
       child: const SizedBox(height: 120),
+    );
+  }
+}
+
+// ─── Next Task Empty State ───────────────────────────────
+
+class _NextTaskEmpty extends StatelessWidget {
+  final VoidCallback? onRetry;
+
+  const _NextTaskEmpty({this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: AppColors.primary.withValues(alpha: 0.1),
+      child: InkWell(
+        onTap: onRetry,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Icon(
+                Icons.schedule,
+                color: AppColors.primary.withValues(alpha: 0.5),
+                size: 28,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sin próxima tarea',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (onRetry != null)
+                      Text(
+                        'Toca para reintentar',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary.withValues(alpha: 0.7),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (onRetry != null)
+                Icon(
+                  Icons.refresh,
+                  color: AppColors.primary.withValues(alpha: 0.5),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

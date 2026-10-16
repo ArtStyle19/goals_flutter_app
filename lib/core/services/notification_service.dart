@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
+import 'dart:typed_data';
 import 'dart:ui';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,17 +28,41 @@ abstract final class NotificationChannels {
 
   /// Persistent notification while a task is in progress.
   static const activeTasks = 'active_tasks';
+
+  /// Test notifications for configuration/testing.
+  static const testNotifications = 'test_notifications';
 }
 
 /// Action identifiers attached to notification buttons.
+///
+/// Used by **both** local ongoing-task notifications and FCM-originated
+/// notifications shown via [FlutterLocalNotificationsPlugin].
 abstract final class NotificationActions {
-  /// User tapped "Completar" on an ongoing notification.
+  /// User tapped "Completar".
   static const completeTask = 'complete_task';
+
+  /// User tapped "Omitir" (FCM notifications only).
+  static const skipTask = 'skip_task';
+
+  /// User tapped "Posponer" (FCM notifications only).
+  static const postponeTask = 'postpone_task';
 }
 
 /// Offset added to a task ID so that the *ongoing* notification uses a
 /// different system-notification-ID than the *reminder* for the same task.
 const _ongoingIdOffset = 100000;
+
+/// Offset for test notification IDs to avoid conflicts with task notifications.
+const _testIdOffset = 200000;
+
+/// SharedPreferences key for storing scheduled test notifications.
+const _kScheduledTestNotifications = 'scheduled_test_notifications';
+
+/// Payload action identifier for test notifications.
+abstract final class TestNotificationActions {
+  static const instant = 'test_instant';
+  static const scheduled = 'test_scheduled';
+}
 
 // ═══════════════════════════════════════════════════════════
 // NOTIFICATION PAYLOAD
@@ -43,17 +70,43 @@ const _ongoingIdOffset = 100000;
 
 /// Structured payload serialized as JSON in the notification's `payload`
 /// field.  Keeps routing and action-handling type-safe.
+///
+/// Supports two payload formats:
+/// - **Local notifications**: `{"taskId": 42, "action": "..."}`
+/// - **FCM data payloads**: `{"task_id": "42", "type": "task_start", ...}`
 class NotificationPayload {
   final int taskId;
   final String? action;
 
-  const NotificationPayload({required this.taskId, this.action});
+  /// `true` when this payload was deserialized from an FCM data message
+  /// (contains `task_id` + `type`), `false` for local payloads.
+  final bool fromFCM;
+
+  const NotificationPayload({
+    required this.taskId,
+    this.action,
+    this.fromFCM = false,
+  });
 
   factory NotificationPayload.fromJson(String json) {
     final map = jsonDecode(json) as Map<String, dynamic>;
+
+    // Detect origin: FCM payloads use 'task_id' (snake_case) + 'type'.
+    final isFCM = map.containsKey('task_id') && map.containsKey('type');
+
+    // Support both local format (taskId as int) and FCM format (task_id as String)
+    final rawTaskId = map['taskId'] ?? map['task_id'];
+    if (rawTaskId == null) {
+      throw FormatException('Payload missing taskId/task_id: $json');
+    }
+    final taskId = rawTaskId is int
+        ? rawTaskId
+        : int.parse(rawTaskId.toString());
+
     return NotificationPayload(
-      taskId: map['taskId'] as int,
+      taskId: taskId,
       action: map['action'] as String?,
+      fromFCM: isFCM,
     );
   }
 
@@ -67,8 +120,13 @@ class NotificationPayload {
 /// Called when the user taps a notification body → navigate to task.
 typedef OnNotificationTap = void Function(NotificationPayload payload);
 
-/// Called when the user taps the "Completar" action button.
+/// Called when the user taps the "Completar" action button on a local
+/// ongoing-task notification.
 typedef OnCompleteAction = Future<void> Function(int taskId);
+
+/// Called when the user taps an action button on an FCM notification
+/// (Complete or Skip). Receives the taskId and action name.
+typedef OnFCMTaskAction = void Function(int taskId, String action);
 
 // ═══════════════════════════════════════════════════════════
 // PROVIDERS
@@ -113,13 +171,26 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   final SharedPreferences _prefs;
 
+  /// Exposes the shared [FlutterLocalNotificationsPlugin] instance so that
+  /// other services (e.g. [FCMService]) can **show** notifications through
+  /// it without calling `initialize()` a second time (which would overwrite
+  /// the response handler registered here).
+  static FlutterLocalNotificationsPlugin get plugin => _plugin;
+
   /// Callbacks set once during [initialize].
   static OnNotificationTap? _onTap;
   static OnCompleteAction? _onComplete;
+  static OnFCMTaskAction? _onFCMAction;
 
   /// Tracks scheduled reminder notification IDs so we can cancel only
   /// reminders without touching ongoing task notifications.
   static final Set<int> _scheduledReminderIds = {};
+
+  /// Tracks scheduled test notification IDs.
+  static final Set<int> _scheduledTestIds = {};
+
+  /// Android implementation for checking exact alarm permission.
+  static AndroidFlutterLocalNotificationsPlugin? _androidPlugin;
 
   NotificationService(this._prefs);
 
@@ -136,14 +207,19 @@ class NotificationService {
   ///
   /// * [ianaTimezone] – IANA timezone from `flutter_timezone`.
   /// * [onTap]        – called when the user taps the notification body.
-  /// * [onComplete]   – called when the user taps "Completar".
+  /// * [onComplete]   – called when the user taps "Completar" on a **local**
+  ///                    ongoing-task notification.
+  /// * [onFCMAction]  – called when the user taps an action button on an
+  ///                    **FCM** notification (Complete or Skip).
   static Future<void> initialize({
     required String ianaTimezone,
     OnNotificationTap? onTap,
     OnCompleteAction? onComplete,
+    OnFCMTaskAction? onFCMAction,
   }) async {
     _onTap = onTap;
     _onComplete = onComplete;
+    _onFCMAction = onFCMAction;
 
     // Timezone
     tz.initializeTimeZones();
@@ -160,12 +236,34 @@ class NotificationService {
       requestBadgePermission: true,
       requestSoundPermission: true,
       notificationCategories: [
+        // Category for local ongoing-task notifications (Completar only).
         DarwinNotificationCategory(
           'active_task',
           actions: [
             DarwinNotificationAction.plain(
               NotificationActions.completeTask,
               'Completar',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+          ],
+        ),
+        // Category for FCM task notifications (Completar + Omitir + Posponer).
+        DarwinNotificationCategory(
+          'task_actions',
+          actions: [
+            DarwinNotificationAction.plain(
+              NotificationActions.completeTask,
+              'Completar',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+            DarwinNotificationAction.plain(
+              NotificationActions.skipTask,
+              'Omitir',
+              options: {DarwinNotificationActionOption.foreground},
+            ),
+            DarwinNotificationAction.plain(
+              NotificationActions.postponeTask,
+              'Posponer',
               options: {DarwinNotificationActionOption.foreground},
             ),
           ],
@@ -189,17 +287,130 @@ class NotificationService {
           AndroidFlutterLocalNotificationsPlugin
         >()
         ?.requestNotificationsPermission();
+
+    // Store Android plugin reference for exact alarm checks.
+    _androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+
+    // Create notification channels for Android.
+    await _createNotificationChannels();
+  }
+
+  // ─── Android Notification Channels ─────────────────────
+
+  /// Creates all required notification channels for Android.
+  static Future<void> _createNotificationChannels() async {
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (androidPlugin == null) return;
+
+    // Test notifications channel - high importance for sound and vibration.
+    final testChannel = AndroidNotificationChannel(
+      NotificationChannels.testNotifications,
+      'Test de Notificaciones',
+      description: 'Notificaciones de prueba con sonido y vibración',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+    );
+
+    await androidPlugin.createNotificationChannel(testChannel);
+    dev.log('[NotificationService] Created test notification channel');
+  }
+
+  // ─── Exact Alarm Permission (Android 12+) ──────────────
+
+  /// Checks if the app has permission to schedule exact alarms.
+  /// Required for Android 12+ (API 31+).
+  static Future<bool> canScheduleExactAlarms() async {
+    if (_androidPlugin == null) return true; // iOS or not initialized.
+
+    try {
+      final canSchedule = await _androidPlugin!.canScheduleExactNotifications();
+      dev.log('[NotificationService] Can schedule exact alarms: $canSchedule');
+      return canSchedule ?? false;
+    } catch (e) {
+      dev.log(
+        '[NotificationService] Error checking exact alarm permission: $e',
+      );
+      return false;
+    }
+  }
+
+  /// Opens system settings to request exact alarm permission.
+  /// Returns true if the permission was granted after the user returned.
+  static Future<bool> requestExactAlarmPermission() async {
+    if (_androidPlugin == null) return true; // iOS or not initialized.
+
+    try {
+      await _androidPlugin!.requestExactAlarmsPermission();
+      // Check again after user returns from settings.
+      return await canScheduleExactAlarms();
+    } catch (e) {
+      dev.log(
+        '[NotificationService] Error requesting exact alarm permission: $e',
+      );
+      return false;
+    }
   }
 
   // ─── Response Handlers ─────────────────────────────────
 
   /// Handles notification interaction in the foreground or when the app
   /// is opened from a notification tap.
+  ///
+  /// This is the **single** response handler for both local and FCM
+  /// notifications because [FlutterLocalNotificationsPlugin] is a
+  /// singleton — only the **last** `initialize()` call's handler is active.
   static void _handleResponse(NotificationResponse response) {
+    dev.log(
+      '[NotificationService] Response: actionId=${response.actionId}, '
+      'payload=${response.payload}',
+    );
+
     final payload = _parsePayload(response.payload);
     if (payload == null) return;
 
+    // ── FCM-originated notifications ────────────────────
+    // FCM payloads contain 'task_id' (snake_case) and extra fields like
+    // 'type', 'show_actions', etc.  Local payloads contain 'taskId'.
+    if (payload.fromFCM) {
+      dev.log(
+        '[NotificationService] FCM payload detected for taskId=${payload.taskId}',
+      );
+
+      if (response.actionId == NotificationActions.completeTask) {
+        dev.log('[NotificationService] FCM action: COMPLETE');
+        _onFCMAction?.call(payload.taskId, 'complete');
+        return;
+      }
+
+      if (response.actionId == NotificationActions.skipTask) {
+        dev.log('[NotificationService] FCM action: SKIP');
+        _onFCMAction?.call(payload.taskId, 'skip');
+        return;
+      }
+
+      if (response.actionId == NotificationActions.postponeTask) {
+        dev.log('[NotificationService] FCM action: POSTPONE');
+        _onFCMAction?.call(payload.taskId, 'postpone');
+        return;
+      }
+
+      // Body tap on FCM notification → open task.
+      dev.log('[NotificationService] FCM action: OPEN (body tap)');
+      _onFCMAction?.call(payload.taskId, 'open');
+      return;
+    }
+
+    // ── Local ongoing-task notifications ─────────────────
     if (response.actionId == NotificationActions.completeTask) {
+      dev.log('[NotificationService] Local action: COMPLETE');
       _onComplete?.call(payload.taskId);
       return;
     }
@@ -450,5 +661,188 @@ class NotificationService {
   Future<void> cancelAll() async {
     await _plugin.cancelAll();
     _scheduledReminderIds.clear();
+    _scheduledTestIds.clear();
+    await _prefs.remove(_kScheduledTestNotifications);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // TEST NOTIFICATIONS
+  // ═══════════════════════════════════════════════════════════
+
+  /// Shows an instant test notification immediately with sound and vibration.
+  ///
+  /// Used for testing notification configuration in the settings page.
+  Future<void> showTestNotification() async {
+    if (!isEnabled) return;
+
+    const title = '🔔 Test de Notificación';
+    const body = '¡Las notificaciones están funcionando correctamente!';
+
+    await _plugin.show(
+      _testIdOffset,
+      title,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          NotificationChannels.testNotifications,
+          'Test de Notificaciones',
+          channelDescription:
+              'Notificaciones de prueba para verificar configuración',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+          color: const Color(0xFF6366F1),
+          category: AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(
+            '$body\n\nEsta es una notificación de prueba. Si puedes ver esto y escuchar el sonido, la configuración es correcta.',
+            contentTitle: title,
+            summaryText: 'Productivity Planner',
+          ),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          presentBadge: true,
+          sound: 'default',
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      ),
+    );
+  }
+
+  /// Schedules a test notification at the specified date and time.
+  ///
+  /// The notification will trigger exactly at [scheduledDate] with sound
+  /// and vibration, even if the device is in doze mode or restarted.
+  ///
+  /// For Android 12+, this requires the SCHEDULE_EXACT_ALARM permission.
+  /// If not granted, it will fall back to inexact scheduling.
+  ///
+  /// Returns the notification ID that can be used to cancel it.
+  Future<int> scheduleTestNotification(DateTime scheduledDate) async {
+    if (!isEnabled) throw StateError('Notifications are disabled');
+
+    // Check for exact alarm permission on Android 12+.
+    final canScheduleExact = await canScheduleExactAlarms();
+    if (!canScheduleExact) {
+      dev.log(
+        '[NotificationService] Exact alarm permission not granted, '
+        'falling back to inexact scheduling',
+      );
+    }
+
+    // Generate unique ID based on timestamp.
+    final notificationId =
+        _testIdOffset + DateTime.now().millisecondsSinceEpoch % 100000;
+
+    final tzSchedule = tz.TZDateTime.from(scheduledDate, tz.local);
+
+    // Don't schedule if the time has already passed.
+    if (tzSchedule.isBefore(tz.TZDateTime.now(tz.local))) {
+      throw ArgumentError('Cannot schedule notification in the past');
+    }
+
+    const title = '⏰ Notificación Programada';
+    final body =
+        'Esta notificación fue programada para: ${_formatDateTime(scheduledDate)}';
+
+    // Use exact scheduling if permitted, otherwise fall back to inexact.
+    final scheduleMode = canScheduleExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
+    dev.log(
+      '[NotificationService] Scheduling notification $notificationId '
+      'for $tzSchedule with mode: $scheduleMode',
+    );
+
+    await _plugin.zonedSchedule(
+      notificationId,
+      title,
+      body,
+      tzSchedule,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          NotificationChannels.testNotifications,
+          'Test de Notificaciones',
+          channelDescription: 'Notificaciones de prueba programadas',
+          importance: Importance.max,
+          priority: Priority.high,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: Int64List.fromList([0, 500, 200, 500, 200, 500]),
+          color: const Color(0xFF6366F1),
+          category: AndroidNotificationCategory.reminder,
+          styleInformation: BigTextStyleInformation(
+            '$body\n\n¡La notificación programada funcionó correctamente! '
+            'El dispositivo reiniciado o apagado no afectó la programación.',
+            contentTitle: title,
+            summaryText: 'Productivity Planner',
+          ),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentSound: true,
+          presentBadge: true,
+          sound: 'default',
+          interruptionLevel: InterruptionLevel.timeSensitive,
+        ),
+      ),
+      androidScheduleMode: scheduleMode,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+
+    _scheduledTestIds.add(notificationId);
+    await _saveScheduledTestNotifications();
+
+    dev.log(
+      '[NotificationService] Scheduled notification $notificationId '
+      'successfully',
+    );
+
+    return notificationId;
+  }
+
+  /// Cancels a specific scheduled test notification.
+  Future<void> cancelTestNotification(int notificationId) async {
+    await _plugin.cancel(notificationId);
+    _scheduledTestIds.remove(notificationId);
+    await _saveScheduledTestNotifications();
+  }
+
+  /// Gets all currently scheduled test notification IDs.
+  Set<int> getScheduledTestNotificationIds() {
+    return Set.unmodifiable(_scheduledTestIds);
+  }
+
+  /// Persists scheduled test notification IDs to SharedPreferences.
+  Future<void> _saveScheduledTestNotifications() async {
+    final list = _scheduledTestIds.toList();
+    await _prefs.setStringList(
+      _kScheduledTestNotifications,
+      list.map((id) => id.toString()).toList(),
+    );
+  }
+
+  /// Loads scheduled test notification IDs from SharedPreferences.
+  Future<void> loadScheduledTestNotifications() async {
+    final list = _prefs.getStringList(_kScheduledTestNotifications);
+    if (list != null) {
+      _scheduledTestIds.clear();
+      _scheduledTestIds.addAll(list.map((s) => int.parse(s)));
+    }
+  }
+
+  /// Formats DateTime for display in notification body.
+  String _formatDateTime(DateTime dateTime) {
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final year = dateTime.year;
+    return '$day/$month/$year $hour:$minute';
   }
 }

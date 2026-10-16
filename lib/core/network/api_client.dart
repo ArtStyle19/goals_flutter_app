@@ -3,6 +3,7 @@
 library;
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:productivity/core/error/exceptions.dart';
 
@@ -36,20 +37,31 @@ class ApiClient {
     dynamic data,
     required T Function(dynamic data) parser,
 
-    /// Optional per-request timeout (applies to send/receive).
+    /// Optional per-request timeout (applies to connect/send/receive).
+    /// This overrides the base Dio timeout for this specific request.
     Duration? requestTimeout,
   }) async {
+    // Debug logging for timeout diagnosis
+    if (requestTimeout != null) {
+      debugPrint('┌─── API CLIENT POST ────────────────────────────');
+      debugPrint('│ Path: $path');
+      debugPrint('│ Custom timeout: ${requestTimeout.inSeconds}s');
+      debugPrint('└──────────────────────────────────────────────');
+    }
+
     try {
-      final response = await _dio.post(
-        path,
-        data: data,
-        options: requestTimeout != null
-            ? Options(
-                sendTimeout: requestTimeout,
-                receiveTimeout: requestTimeout,
-              )
-            : null,
-      );
+      // Build options - if custom timeout provided, use it for all timeout types
+      // to ensure it overrides the base Dio configuration
+      final options = requestTimeout != null
+          ? Options(
+              connectTimeout: requestTimeout,
+              sendTimeout: requestTimeout,
+              receiveTimeout: requestTimeout,
+            )
+          : null;
+
+      final response = await _dio.post(path, data: data, options: options);
+
       return parser(response.data);
     } on DioException catch (e) {
       throw _handleDioError(e);
@@ -97,6 +109,14 @@ class ApiClient {
 
   /// Maps [DioException] to the appropriate [AppException].
   AppException _handleDioError(DioException e) {
+    // Debug logging to diagnose refresh errors
+    debugPrint('┌─── DIO ERROR ────────────────────────────────');
+    debugPrint('│ Type: ${e.type}');
+    debugPrint('│ Message: ${e.message}');
+    debugPrint('│ Response: ${e.response?.data}');
+    debugPrint('│ Status: ${e.response?.statusCode}');
+    debugPrint('└──────────────────────────────────────────────');
+
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -109,7 +129,8 @@ class ApiClient {
       case DioExceptionType.cancel:
         return const NetworkException('Solicitud cancelada.');
       default:
-        return const NetworkException('Error de red inesperado.');
+        // Include actual error details for debugging
+        return NetworkException('Error de red: ${e.message}');
     }
   }
 

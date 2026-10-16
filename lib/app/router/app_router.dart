@@ -8,13 +8,13 @@ import 'package:productivity/features/auth/presentation/pages/login_page.dart';
 import 'package:productivity/features/auth/presentation/pages/register_page.dart';
 import 'package:productivity/features/auth/presentation/pages/splash_page.dart';
 import 'package:productivity/features/auth/presentation/state/auth_provider.dart';
-import 'package:productivity/features/auth/presentation/state/auth_state.dart';
 import 'package:productivity/features/calendar/presentation/pages/calendar_page.dart';
 import 'package:productivity/features/calendar/presentation/pages/today_page.dart';
 import 'package:productivity/features/goals/presentation/pages/create_goal_page.dart';
 import 'package:productivity/features/goals/presentation/pages/goal_detail_page.dart';
 import 'package:productivity/features/goals/presentation/pages/goal_stats_page.dart';
 import 'package:productivity/features/goals/presentation/pages/goals_list_page.dart';
+import 'package:productivity/features/goals/presentation/pages/replan_goal_page.dart';
 import 'package:productivity/features/onboarding/presentation/pages/onboarding_page.dart';
 import 'package:productivity/features/settings/presentation/pages/settings_page.dart';
 import 'package:productivity/features/tasks/presentation/pages/task_detail_page.dart';
@@ -61,7 +61,7 @@ CustomTransitionPage<void> _buildSlideTransition({
 
 /// Provides the GoRouter instance to the app.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authNotifierProvider);
+  final authAsync = ref.watch(authProvider);
   final hasCompletedOnboarding = ref.watch(onboardingCompleteProvider);
 
   return GoRouter(
@@ -74,13 +74,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       final currentPath = state.matchedLocation;
 
       // Auth state checks
-      final isInitial = authState is AuthInitial;
-      final isLoading = authState is AuthLoading;
-      final isAuthenticated = authState is AuthAuthenticated;
+      final isLoading = authAsync.isLoading;
+      final isAuthenticated = authAsync.valueOrNull != null;
 
       // Splash is always accessible during initial check
       if (currentPath == AppRoutes.splash) {
-        if (isInitial || isLoading) return null;
+        if (isLoading) return null;
         if (!hasCompletedOnboarding) return AppRoutes.onboarding;
         return isAuthenticated ? AppRoutes.goals : AppRoutes.login;
       }
@@ -127,10 +126,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
 
       // ─── Main Shell (Bottom Nav) ──────────────
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         parentNavigatorKey: rootNavigatorKey,
+        navigatorContainerBuilder: (context, navigationShell, children) {
+          return MainShell(
+            navigationShell: navigationShell,
+            children: children,
+          );
+        },
         builder: (context, state, navigationShell) {
-          return MainShell(navigationShell: navigationShell);
+          return navigationShell;
         },
         branches: [
           // Tab 1: Goals
@@ -168,6 +173,17 @@ final routerProvider = Provider<GoRouter>((ref) {
                           return _buildSlideTransition(
                             state: state,
                             child: GoalStatsPage(goalId: id),
+                          );
+                        },
+                      ),
+                      GoRoute(
+                        path: 'replan',
+                        parentNavigatorKey: rootNavigatorKey,
+                        pageBuilder: (context, state) {
+                          final id = int.parse(state.pathParameters['id']!);
+                          return _buildSlideTransition(
+                            state: state,
+                            child: ReplanGoalPage(goalId: id),
                           );
                         },
                       ),

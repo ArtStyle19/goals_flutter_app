@@ -23,11 +23,11 @@ class GoalStatsPage extends ConsumerWidget {
         loading: () => const LoadingWidget(message: 'Cargando estadísticas...'),
         error: (e, _) => AppErrorWidget(
           message: userFriendlyMessage(e),
-          onRetry: () => ref.invalidate(goalStatsProvider(goalId)),
+          onRetry: () => ref.refresh(goalStatsProvider(goalId)),
         ),
         data: (stats) {
           return RefreshIndicator(
-            onRefresh: () async => ref.invalidate(goalStatsProvider(goalId)),
+            onRefresh: () async => ref.refresh(goalStatsProvider(goalId)),
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(16),

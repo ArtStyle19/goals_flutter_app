@@ -69,3 +69,13 @@ class NotFoundException extends AppException {
 class CacheException extends AppException {
   const CacheException([super.message = 'Error de almacenamiento local']);
 }
+
+/// Thrown when the user cancels a sign-in flow (e.g., Google Sign-In sheet).
+///
+/// This is NOT an error — the user intentionally dismissed the flow.
+/// Callers should silently return to the previous state.
+class AuthCancelledException extends AppException {
+  const AuthCancelledException([
+    super.message = 'Inicio de sesión cancelado.',
+  ]);
+}

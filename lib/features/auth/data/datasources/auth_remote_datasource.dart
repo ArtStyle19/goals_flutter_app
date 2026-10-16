@@ -8,6 +8,9 @@ import 'package:productivity/features/auth/data/models/user_model.dart';
 abstract class AuthRemoteDataSource {
   Future<({UserModel user, String token})> register(RegisterRequest request);
   Future<({UserModel user, String token})> login(LoginRequest request);
+  Future<({UserModel user, String token, bool isNewUser})> loginWithGoogle(
+    String idToken,
+  );
   Future<void> logout();
   Future<UserModel> getMe();
 }
@@ -45,6 +48,24 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
         return (
           user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
           token: json['token'] as String,
+        );
+      },
+    );
+  }
+
+  @override
+  Future<({UserModel user, String token, bool isNewUser})> loginWithGoogle(
+    String idToken,
+  ) async {
+    return _apiClient.post(
+      ApiEndpoints.googleAuth,
+      data: {'id_token': idToken},
+      parser: (data) {
+        final json = data as Map<String, dynamic>;
+        return (
+          user: UserModel.fromJson(json['user'] as Map<String, dynamic>),
+          token: json['token'] as String,
+          isNewUser: json['is_new_user'] as bool? ?? false,
         );
       },
     );

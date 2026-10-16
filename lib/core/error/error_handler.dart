@@ -17,6 +17,7 @@ Failure mapExceptionToFailure(AppException exception) {
     ),
     NotFoundException() => NotFoundFailure(exception.message),
     CacheException() => CacheFailure(exception.message),
+    AuthCancelledException() => AuthFailure(exception.message),
   };
 }
 

@@ -1,10 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:productivity/core/constants/storage_keys.dart';
 import 'package:productivity/core/error/exceptions.dart';
+import 'package:productivity/core/utils/json_converters.dart';
 import 'package:productivity/features/auth/data/models/user_model.dart';
 
 /// Local data source for auth token and cached user management.
@@ -65,7 +64,7 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
   @override
   Future<void> cacheUser(UserModel user) async {
     try {
-      final jsonString = jsonEncode(user.toJson());
+      final jsonString = safeJsonEncode(user.toJson());
       await _prefs.setString(StorageKeys.cachedUser, jsonString);
     } catch (_) {
       throw const CacheException('No se pudo guardar los datos del usuario.');
@@ -77,7 +76,8 @@ class AuthLocalDataSourceImpl implements AuthLocalDataSource {
     try {
       final jsonString = _prefs.getString(StorageKeys.cachedUser);
       if (jsonString == null) return null;
-      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      final json = safeJsonDecode(jsonString);
+      if (json == null) return null;
       return UserModel.fromJson(json);
     } catch (_) {
       return null;

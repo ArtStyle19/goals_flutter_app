@@ -11,6 +11,8 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
   name: json['name'] as String,
   email: json['email'] as String,
   createdAt: json['created_at'] as String,
+  avatarUrl: json['avatar_url'] as String?,
+  googleId: json['google_id'] as String?,
 );
 
 Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
@@ -18,4 +20,6 @@ Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
   'name': instance.name,
   'email': instance.email,
   'created_at': instance.createdAt,
+  'avatar_url': instance.avatarUrl,
+  'google_id': instance.googleId,
 };

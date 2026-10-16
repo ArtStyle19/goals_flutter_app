@@ -29,7 +29,7 @@ class GoalDetailPage extends ConsumerWidget {
         appBar: AppBar(),
         body: AppErrorWidget(
           message: userFriendlyMessage(error),
-          onRetry: () => ref.invalidate(goalDetailProvider(goalId)),
+          onRetry: () => ref.refresh(goalDetailProvider(goalId)),
         ),
       ),
       data: (goal) {
@@ -49,6 +49,8 @@ class GoalDetailPage extends ConsumerWidget {
                       _editGoal(context, ref, goal);
                     case 'generate':
                       _generateTasks(context, ref);
+                    case 'replan':
+                      _replanGoal(context, ref, goal);
                     case 'complete':
                       _completeGoal(context, ref);
                     case 'update_deadline':
@@ -77,6 +79,18 @@ class GoalDetailPage extends ConsumerWidget {
                           Icon(Icons.auto_awesome, size: 20),
                           SizedBox(width: 12),
                           Text('Generar tareas con IA'),
+                        ],
+                      ),
+                    ),
+                  if (goal.status == GoalStatus.active ||
+                      goal.status == GoalStatus.completed)
+                    const PopupMenuItem(
+                      value: 'replan',
+                      child: Row(
+                        children: [
+                          Icon(Icons.replay, size: 20),
+                          SizedBox(width: 12),
+                          Text('Replanificar con IA'),
                         ],
                       ),
                     ),
@@ -124,7 +138,7 @@ class GoalDetailPage extends ConsumerWidget {
             ],
           ),
           body: RefreshIndicator(
-            onRefresh: () async => ref.invalidate(goalDetailProvider(goalId)),
+            onRefresh: () async => ref.refresh(goalDetailProvider(goalId)),
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -410,6 +424,17 @@ class GoalDetailPage extends ConsumerWidget {
           ),
         );
       }
+    }
+  }
+
+  Future<void> _replanGoal(
+    BuildContext context,
+    WidgetRef ref,
+    GoalEntity goal,
+  ) async {
+    final result = await context.push<bool>('/goals/$goalId/replan');
+    if (result == true && context.mounted) {
+      ref.invalidate(goalDetailProvider(goalId));
     }
   }
 
